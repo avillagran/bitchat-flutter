@@ -1,0 +1,2 @@
+/Users/avillagran/Desarrollo/bitchat-flutter/android/app/.cxx/Debug/2523v432/armeabi-v7a/CMakeFiles/edit_cache.dir
+/Users/avillagran/Desarrollo/bitchat-flutter/android/app/.cxx/Debug/2523v432/armeabi-v7a/CMakeFiles/rebuild_cache.dir

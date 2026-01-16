@@ -1,0 +1,696 @@
+import 'dart:typed_data';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:bitchat/features/mesh/peer_manager.dart';
+import 'package:bitchat/features/mesh/store_forward_manager.dart';
+import 'package:bitchat/features/mesh/power_manager.dart';
+
+/// Integration tests for PeerManager, StoreForwardManager, and PowerManager.
+/// Tests the interaction and coordination between core mesh managers.
+void main() {
+  group('Manager Integration Tests', () {
+    late PeerManager peerManager;
+    late StoreForwardManager storeForwardManager;
+    late PowerManager powerManager;
+
+    setUp(() {
+      peerManager = PeerManager();
+      storeForwardManager = StoreForwardManager();
+      powerManager = PowerManager();
+    });
+
+    tearDown(() {
+      powerManager.dispose();
+    });
+
+    group('Peer and Message Coordination', () {
+      test('should track peer activity with message queue', () {
+        // Arrange
+        final peer1 = PeerInfo(
+          id: 'peer-1',
+          name: 'Alice',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        );
+        peerManager.addPeer(peer1);
+
+        // Act - queue messages for peer
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'msg-1',
+          payload: 'Hello Alice',
+          destination: 'peer-1',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'msg-2',
+          payload: 'How are you?',
+          destination: 'peer-1',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+
+        // Assert - peer exists and messages queued
+        expect(peerManager.getPeer('peer-1'), isNotNull);
+        expect(storeForwardManager.getPendingMessages().length, equals(2));
+      });
+
+      test('should handle peer disconnection with pending messages', () {
+        // Arrange
+        final peer2 = PeerInfo(
+          id: 'peer-2',
+          name: 'Bob',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        );
+        peerManager.addPeer(peer2);
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'msg-3',
+          payload: 'Message for offline peer',
+          destination: 'peer-2',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+
+        // Act - disconnect peer
+        peerManager.updatePeer('peer-2', isConnected: false);
+
+        // Assert - messages remain queued for offline peer
+        expect(peerManager.getPeer('peer-2')?.isConnected, isFalse);
+        final pendingForPeer2 = storeForwardManager.getPendingMessages()
+            .where((m) => m.destination == 'peer-2');
+        expect(pendingForPeer2.length, equals(1));
+      });
+
+      test('should manage multiple peers with dedicated message queues', () {
+        // Arrange
+        final peers = [
+          PeerInfo(
+            id: 'peer-1',
+            name: 'Alice',
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ),
+          PeerInfo(
+            id: 'peer-2',
+            name: 'Bob',
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ),
+          PeerInfo(
+            id: 'peer-3',
+            name: 'Charlie',
+            isConnected: false,
+            lastSeen: DateTime.now().millisecondsSinceEpoch - 10000,
+          ),
+        ];
+
+        // Act
+        for (final peer in peers) {
+          peerManager.addPeer(peer);
+        }
+
+        // Queue messages for different peers
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'msg-1',
+          payload: 'To Alice',
+          destination: 'peer-1',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'msg-2',
+          payload: 'To Bob',
+          destination: 'peer-2',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'msg-3',
+          payload: 'To Charlie (offline)',
+          destination: 'peer-3',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+
+        // Assert
+        expect(peerManager.getAllPeers().length, equals(3));
+        expect(storeForwardManager.getPendingMessages().length, equals(3));
+      });
+
+      test('should process messages for connected peers first', () {
+        // Arrange - peers with different connection states
+        peerManager.addPeer(PeerInfo(
+          id: 'online-peer',
+          name: 'Online Peer',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        ));
+        peerManager.addPeer(PeerInfo(
+          id: 'offline-peer',
+          name: 'Offline Peer',
+          isConnected: false,
+          lastSeen: DateTime.now().millisecondsSinceEpoch - 300000, // 5 min ago
+        ));
+
+        // Queue messages in mixed order
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'msg-1',
+          payload: 'To offline',
+          destination: 'offline-peer',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'msg-2',
+          payload: 'To online',
+          destination: 'online-peer',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+
+        // Act - process messages (FIFO by default)
+        final messages = storeForwardManager.getPendingMessages();
+
+        // Assert - verify order (FIFO)
+        expect(messages[0].destination, equals('offline-peer'));
+        expect(messages[1].destination, equals('online-peer'));
+      });
+    });
+
+    group('Power and Resource Management', () {
+      test('should track power state changes', () {
+        // Arrange
+        PowerState? capturedState;
+        powerManager.addPowerStateListener((state) {
+          capturedState = state;
+        });
+
+        // Act - transition to low battery
+        powerManager.updatePowerState(PowerState(
+          batteryLevel: 15,
+          isCharging: false,
+          isPowerSaveMode: true,
+          platform: 'android',
+        ));
+
+        // Assert
+        expect(capturedState, isNotNull);
+        expect(capturedState?.batteryLevel, equals(15));
+        expect(capturedState?.isPowerSaveMode, isTrue);
+      });
+
+      test('should notify multiple listeners on power change', () {
+        // Arrange
+        final states = <PowerState>[];
+        powerManager.addPowerStateListener((state) => states.add(state));
+        powerManager.addPowerStateListener((state) => states.add(state));
+
+        // Act
+        powerManager.updatePowerState(PowerState(
+          batteryLevel: 50,
+          isCharging: true,
+          isPowerSaveMode: false,
+          platform: 'ios',
+        ));
+
+        // Assert
+        expect(states.length, equals(2));
+        expect(states[0].batteryLevel, equals(50));
+        expect(states[1].batteryLevel, equals(50));
+      });
+
+      test('should handle battery drain scenario', () {
+        // Arrange - simulate battery levels over time
+        final batteryLevels = [100, 85, 70, 55, 40, 25, 15, 10];
+
+        // Act - drain battery
+        for (final level in batteryLevels) {
+          powerManager.updatePowerState(PowerState(
+            batteryLevel: level,
+            isCharging: false,
+            isPowerSaveMode: level < 20,
+            platform: 'android',
+          ));
+        }
+
+        // Assert - final state is power save
+        expect(powerManager.currentState.batteryLevel, equals(10));
+        expect(powerManager.currentState.isPowerSaveMode, isTrue);
+      });
+
+      test('should handle charging scenario', () {
+        // Arrange - start low, then charge
+        powerManager.updatePowerState(PowerState(
+          batteryLevel: 10,
+          isCharging: false,
+          isPowerSaveMode: true,
+          platform: 'ios',
+        ));
+
+        // Act - plug in charger
+        powerManager.updatePowerState(PowerState(
+          batteryLevel: 15,
+          isCharging: true,
+          isPowerSaveMode: false, // Charging disables power save
+          platform: 'ios',
+        ));
+
+        // Assert
+        expect(powerManager.currentState.isCharging, isTrue);
+        expect(powerManager.currentState.isPowerSaveMode, isFalse);
+      });
+    });
+
+    group('Power and Message Queue Coordination', () {
+      test('should queue messages in power save mode', () {
+        // Arrange - enter power save mode
+        powerManager.updatePowerState(PowerState(
+          batteryLevel: 10,
+          isCharging: false,
+          isPowerSaveMode: true,
+          platform: 'android',
+        ));
+
+        // Act - queue multiple messages
+        for (int i = 0; i < 5; i++) {
+          storeForwardManager.enqueueMessage(StoreForwardMessage(
+            id: 'msg-$i',
+            payload: 'Message $i',
+            destination: 'peer-1',
+            timestamp: DateTime.now().millisecondsSinceEpoch,
+            type: StoreForwardMessageType.outbound,
+          ));
+        }
+
+        // Assert - all messages queued regardless of power state
+        expect(storeForwardManager.getPendingMessages().length, equals(5));
+        expect(powerManager.currentState.isPowerSaveMode, isTrue);
+      });
+
+      test('should handle power state during message processing', () {
+        // Arrange - queue messages
+        for (int i = 0; i < 3; i++) {
+          storeForwardManager.enqueueMessage(StoreForwardMessage(
+            id: 'msg-$i',
+            payload: 'Message $i',
+            destination: 'peer-1',
+            timestamp: DateTime.now().millisecondsSinceEpoch,
+            type: StoreForwardMessageType.outbound,
+          ));
+        }
+
+        // Act - transition to power save
+        powerManager.updatePowerState(PowerState(
+          batteryLevel: 20,
+          isCharging: false,
+          isPowerSaveMode: true,
+          platform: 'ios',
+        ));
+
+        // Process a message
+        final msg = storeForwardManager.dequeueMessage();
+
+        // Assert - message still dequeued
+        expect(msg, isNotNull);
+        expect(storeForwardManager.getPendingMessages().length, equals(2));
+      });
+    });
+
+    group('Message Lifecycle and Cleanup', () {
+      test('should expire old messages', () {
+        // Arrange - create old message
+        final oldTimestamp =
+            DateTime.now().millisecondsSinceEpoch - 600000; // 10 min ago
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'old-msg',
+          payload: 'Old message',
+          destination: 'peer-1',
+          timestamp: oldTimestamp,
+          type: StoreForwardMessageType.outbound,
+        ));
+
+        // Create recent message
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'new-msg',
+          payload: 'New message',
+          destination: 'peer-1',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+
+        // Act - clear expired messages (5 min threshold)
+        final removed = storeForwardManager.clearExpired(expiryMillisAgo: 300000);
+
+        // Assert
+        expect(removed, equals(1));
+        expect(storeForwardManager.getPendingMessages().length, equals(1));
+        expect(storeForwardManager.getPendingMessages().first.id, equals('new-msg'));
+      });
+
+      test('should remove specific messages', () {
+        // Arrange
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'msg-1',
+          payload: 'Keep this',
+          destination: 'peer-1',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'msg-2',
+          payload: 'Remove this',
+          destination: 'peer-1',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+
+        // Act - remove specific message
+        final removed = storeForwardManager.removeMessage('msg-2');
+
+        // Assert
+        expect(removed, isTrue);
+        expect(storeForwardManager.getPendingMessages().length, equals(1));
+        expect(storeForwardManager.getPendingMessages().first.id, equals('msg-1'));
+      });
+
+      test('should handle message with different types', () {
+        // Arrange
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'outbound-1',
+          payload: 'Outgoing',
+          destination: 'peer-1',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'inbound-1',
+          payload: 'Incoming',
+          destination: 'peer-2',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.inbound,
+        ));
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'offline-1',
+          payload: 'Offline',
+          destination: 'peer-3',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.offline,
+        ));
+
+        // Act
+        final messages = storeForwardManager.getPendingMessages();
+
+        // Assert
+        expect(messages.length, equals(3));
+        expect(messages[0].type, equals(StoreForwardMessageType.outbound));
+        expect(messages[1].type, equals(StoreForwardMessageType.inbound));
+        expect(messages[2].type, equals(StoreForwardMessageType.offline));
+      });
+    });
+
+    group('Peer State Transitions', () {
+      test('should update peer connection state', () {
+        // Arrange
+        peerManager.addPeer(PeerInfo(
+          id: 'peer-1',
+          name: 'Alice',
+          isConnected: false,
+          lastSeen: DateTime.now().millisecondsSinceEpoch - 60000,
+        ));
+
+        // Act - connect peer
+        peerManager.updatePeer(
+          'peer-1',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        );
+
+        // Assert
+        final peer = peerManager.getPeer('peer-1');
+        expect(peer?.isConnected, isTrue);
+        expect(peer?.lastSeen, greaterThan(0));
+      });
+
+      test('should update multiple peer fields atomically', () {
+        // Arrange
+        peerManager.addPeer(PeerInfo(
+          id: 'peer-1',
+          name: 'Alice',
+          isConnected: false,
+          lastSeen: 1000,
+        ));
+
+        // Act - update multiple fields
+        peerManager.updatePeer(
+          'peer-1',
+          name: 'Alice (Updated)',
+          isConnected: true,
+          lastSeen: 2000,
+          rssi: -65,
+        );
+
+        // Assert
+        final peer = peerManager.getPeer('peer-1');
+        expect(peer?.name, equals('Alice (Updated)'));
+        expect(peer?.isConnected, isTrue);
+        expect(peer?.lastSeen, equals(2000));
+        expect(peer?.rssi, equals(-65));
+      });
+
+      test('should handle peer removal', () {
+        // Arrange
+        peerManager.addPeer(PeerInfo(
+          id: 'peer-1',
+          name: 'Alice',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        ));
+
+        // Act - remove peer
+        peerManager.removePeer('peer-1');
+
+        // Assert
+        expect(peerManager.getPeer('peer-1'), isNull);
+        expect(peerManager.getAllPeers(), isEmpty);
+      });
+
+      test('should add peer with crypto keys', () {
+        // Arrange
+        final noiseKey = Uint8List(32);
+        final signingKey = Uint8List(32);
+
+        // Act
+        peerManager.addPeer(PeerInfo(
+          id: 'peer-1',
+          name: 'Encrypted Peer',
+          noisePublicKey: noiseKey,
+          signingPublicKey: signingKey,
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        ));
+
+        // Assert
+        final peer = peerManager.getPeer('peer-1');
+        expect(peer?.noisePublicKey, isNotNull);
+        expect(peer?.noisePublicKey?.length, equals(32));
+        expect(peer?.signingPublicKey?.length, equals(32));
+      });
+    });
+
+    group('Complex Integration Scenarios', () {
+      test('should handle mesh with offline and online peers', () {
+        // Arrange - create mesh network
+        final onlinePeers = ['peer-1', 'peer-2', 'peer-3'];
+        final offlinePeers = ['peer-4', 'peer-5'];
+
+        for (final id in onlinePeers) {
+          peerManager.addPeer(PeerInfo(
+            id: id,
+            name: 'Online $id',
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
+
+        for (final id in offlinePeers) {
+          peerManager.addPeer(PeerInfo(
+            id: id,
+            name: 'Offline $id',
+            isConnected: false,
+            lastSeen: DateTime.now().millisecondsSinceEpoch - 600000,
+          ));
+        }
+
+        // Queue broadcast messages
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'broadcast-1',
+          payload: 'Broadcast message',
+          destination: 'mesh-broadcast',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+
+        // Assert
+        expect(peerManager.getAllPeers().length, equals(5));
+        final connectedCount = peerManager.getAllPeers()
+            .where((p) => p.isConnected)
+            .length;
+        expect(connectedCount, equals(3));
+      });
+
+      test('should handle rapid peer state changes', () {
+        // Arrange
+        peerManager.addPeer(PeerInfo(
+          id: 'peer-1',
+          name: 'Flaky Peer',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        ));
+
+        // Act - simulate flaky connection
+        for (int i = 0; i < 10; i++) {
+          peerManager.updatePeer(
+            'peer-1',
+            isConnected: i % 2 == 0,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          );
+        }
+
+        // Assert - final state consistent
+        final peer = peerManager.getPeer('peer-1');
+        expect(peer?.isConnected, isFalse); // Last update was false
+      });
+
+      test('should handle power transitions with active mesh', () {
+        // Arrange - active mesh with messages
+        peerManager.addPeer(PeerInfo(
+          id: 'peer-1',
+          name: 'Peer 1',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        ));
+
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'msg-1',
+          payload: 'Active message',
+          destination: 'peer-1',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+
+        // Act - transition through power states
+        powerManager.updatePowerState(PowerState(
+          batteryLevel: 100,
+          isCharging: false,
+          isPowerSaveMode: false,
+          platform: 'android',
+        ));
+        powerManager.updatePowerState(PowerState(
+          batteryLevel: 50,
+          isCharging: false,
+          isPowerSaveMode: false,
+          platform: 'android',
+        ));
+        powerManager.updatePowerState(PowerState(
+          batteryLevel: 15,
+          isCharging: false,
+          isPowerSaveMode: true,
+          platform: 'android',
+        ));
+
+        // Assert - system remains functional
+        expect(peerManager.getAllPeers().length, equals(1));
+        expect(storeForwardManager.getPendingMessages().length, equals(1));
+        expect(powerManager.currentState.isPowerSaveMode, isTrue);
+      });
+    });
+
+    group('Edge Cases and Error Handling', () {
+      test('should handle empty message queue', () {
+        // Act - try to dequeue from empty queue
+        final msg = storeForwardManager.dequeueMessage();
+
+        // Assert
+        expect(msg, isNull);
+      });
+
+      test('should handle removing non-existent message', () {
+        // Act
+        final removed = storeForwardManager.removeMessage('non-existent');
+
+        // Assert
+        expect(removed, isFalse);
+      });
+
+      test('should handle updating non-existent peer', () {
+        // Act
+        final updated = peerManager.updatePeer(
+          'non-existent',
+          name: 'New Name',
+        );
+
+        // Assert
+        expect(updated, isFalse);
+      });
+
+      test('should handle removing non-existent peer', () {
+        // Act - remove peer that doesn't exist
+        peerManager.removePeer('non-existent');
+
+        // Assert - no error, no change
+        expect(peerManager.getAllPeers(), isEmpty);
+      });
+
+      test('should handle null and empty peer IDs gracefully', () {
+        // Arrange
+        peerManager.addPeer(PeerInfo(
+          id: 'valid-peer',
+          name: 'Valid',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        ));
+
+        // Act - try operations with empty strings
+        final peer = peerManager.getPeer('');
+        peerManager.updatePeer('', name: 'Test');
+        peerManager.removePeer('');
+
+        // Assert - no errors, valid peer unaffected
+        expect(peer, isNull);
+        expect(peerManager.getPeer('valid-peer'), isNotNull);
+      });
+
+      test('should handle concurrent operations', () async {
+        // Arrange
+        final futures = <Future>[];
+
+        // Act - perform concurrent operations
+        for (int i = 0; i < 10; i++) {
+          futures.add(Future(() {
+            peerManager.addPeer(PeerInfo(
+              id: 'peer-$i',
+              name: 'Peer $i',
+              isConnected: true,
+              lastSeen: DateTime.now().millisecondsSinceEpoch,
+            ));
+          }));
+          futures.add(Future(() {
+            storeForwardManager.enqueueMessage(StoreForwardMessage(
+              id: 'msg-$i',
+              payload: 'Message $i',
+              destination: 'peer-$i',
+              timestamp: DateTime.now().millisecondsSinceEpoch,
+              type: StoreForwardMessageType.outbound,
+            ));
+          }));
+        }
+
+        await Future.wait(futures);
+
+        // Assert - all operations completed
+        expect(peerManager.getAllPeers().length, equals(10));
+        expect(storeForwardManager.getPendingMessages().length, equals(10));
+      });
+    });
+  });
+}

@@ -1,0 +1,861 @@
+import 'dart:typed_data';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:bitchat/features/mesh/bluetooth_mesh_service.dart';
+import 'package:bitchat/features/mesh/peer_manager.dart';
+import 'package:bitchat/features/mesh/store_forward_manager.dart';
+import 'package:bitchat/features/mesh/power_manager.dart';
+import 'package:bitchat/features/mesh/packet_processor.dart';
+import 'package:bitchat/features/mesh/fragment_manager.dart';
+import 'package:bitchat/features/mesh/packet_relay_manager.dart';
+import 'package:bitchat/features/crypto/encryption_service.dart';
+import 'package:bitchat/data/models/routed_packet.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
+/// Mock class for EncryptionService.
+class MockEncryptionService implements EncryptionService {
+  @override
+  Uint8List get staticPublicKey => Uint8List(32);
+  
+  @override
+  Uint8List get signingPublicKey => Uint8List(32);
+
+  @override
+  Future<void> initialize() async {}
+  
+  @override
+  void clearIdentity() {}
+  
+  @override
+  String? getOrCreateSession(String peerId) => null;
+  
+  @override
+  void removeSession(String peerId) {}
+  
+  @override
+  bool hasSession(String peerId) => false;
+  
+  @override
+  Uint8List? getSessionKey(String peerId) => null;
+}
+
+/// Mock class for BluetoothDevice.
+class MockBluetoothDevice implements BluetoothDevice {
+  final String _id;
+  MockBluetoothDevice([this._id = 'mock-device']);
+
+  @override
+  DeviceIdentifier get remoteId => DeviceIdentifier(_id);
+
+  @override
+  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// Mock delegate for PacketRelayManager.
+class MockRelayDelegate implements PacketRelayManagerDelegate {
+  final List<RoutedPacket> relayedPackets = [];
+  int _networkSize = 10;
+
+  @override
+  int getNetworkSize() => _networkSize;
+
+  set networkSize(int value) => _networkSize = value;
+
+  @override
+  Uint8List getBroadcastRecipient() => 
+      Uint8List.fromList([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+  @override
+  void broadcastPacket(RoutedPacket routed) {
+    relayedPackets.add(routed);
+  }
+
+  @override
+  bool sendToPeer(String peerID, RoutedPacket routed) {
+    // Simulate successful send
+    return true;
+  }
+
+  void reset() {
+    relayedPackets.clear();
+    _networkSize = 10;
+  }
+}
+
+/// Mock delegate for FragmentManager.
+class MockFragmentDelegate implements FragmentManagerDelegate {
+  final List<BitchatPacket> reassembledPackets = [];
+
+  @override
+  void onPacketReassembled(BitchatPacket packet) {
+    reassembledPackets.add(packet);
+  }
+
+  void reset() {
+    reassembledPackets.clear();
+  }
+}
+
+/// End-to-end integration tests for the complete mesh infrastructure.
+/// Tests realistic scenarios involving all managers working together.
+void main() {
+  group('Full Mesh Infrastructure Integration', () {
+    late BluetoothMeshService meshService;
+    late MockEncryptionService mockEncryption;
+    late PeerManager peerManager;
+    late StoreForwardManager storeForwardManager;
+    late PowerManager powerManager;
+    late FragmentManager fragmentManager;
+    late PacketRelayManager relayManager;
+    late PacketProcessor packetProcessor;
+    late MockRelayDelegate relayDelegate;
+    late MockFragmentDelegate fragmentDelegate;
+
+    setUp(() {
+      mockEncryption = MockEncryptionService();
+      meshService = BluetoothMeshService(mockEncryption);
+      peerManager = meshService.peerManager;
+      storeForwardManager = meshService.storeForwardManager;
+      powerManager = meshService.powerManager;
+
+      relayDelegate = MockRelayDelegate();
+      fragmentDelegate = MockFragmentDelegate();
+
+      relayManager = PacketRelayManager('node-001');
+      relayManager.delegate = relayDelegate;
+
+      fragmentManager = FragmentManager();
+      fragmentManager.delegate = fragmentDelegate;
+
+      packetProcessor = PacketProcessor(fragmentManager, relayManager);
+    });
+
+    tearDown(() {
+      meshService.stop();
+      fragmentManager.dispose();
+      relayDelegate.reset();
+      fragmentDelegate.reset();
+    });
+
+    group('End-to-End Packet Flow', () {
+      test('should handle complete packet lifecycle: send, receive, relay', 
+          () async {
+        // Arrange
+        await meshService.start();
+        final senderDevice = MockBluetoothDevice('sender-001');
+
+        // Act - sender sends message
+        meshService.sendMessage('Hello mesh!');
+
+        // Simulate packet from sender
+        final packet = BitchatPacket(
+          type: 0x02,
+          timestamp: DateTime.now(),
+          payload: Uint8List.fromList([72, 101, 108, 108, 111]), // "Hello"
+          ttl: 7,
+        );
+        meshService.onPacketReceived(packet, 'peer-sender', senderDevice);
+
+        // Process packet through relay manager
+        final routed = RoutedPacket(
+          packet: packet,
+          peerID: 'peer-sender',
+        );
+        await packetProcessor.processPacket(routed);
+
+        // Assert
+        expect(peerManager.getPeer('peer-sender'), isNotNull);
+        expect(storeForwardManager.getPendingMessages().length, greaterThan(0));
+        expect(relayDelegate.relayedPackets.length, greaterThan(0));
+      });
+
+      test('should handle fragmented message through complete flow', 
+          () async {
+        // Arrange
+        await meshService.start();
+        final largePayload = Uint8List(1000); // > fragment threshold
+        for (int i = 0; i < largePayload.length; i++) {
+          largePayload[i] = i % 256;
+        }
+
+        final originalPacket = BitchatPacket(
+          type: 0x02,
+          timestamp: DateTime.now(),
+          payload: largePayload,
+          ttl: 7,
+        );
+
+        // Act - fragment the packet
+        final mySenderID = Uint8List.fromList([1, 2, 3, 4, 5, 6, 7, 8]);
+        final fragments = fragmentManager.createFragments(
+          originalPacket,
+          mySenderID: mySenderID,
+        );
+
+        // Process all fragments
+        for (final fragment in fragments) {
+          final routed = RoutedPacket(
+            packet: fragment,
+            peerID: 'peer-fragment',
+          );
+          await packetProcessor.processPacket(routed);
+        }
+
+        // Assert
+        expect(fragments.length, greaterThan(1));
+        expect(fragmentDelegate.reassembledPackets.length, equals(1));
+        final reassembled = fragmentDelegate.reassembledPackets.first;
+        expect(reassembled.payload?.length, equals(largePayload.length));
+      });
+
+      test('should handle multi-hop relay through mesh', () async {
+        // Arrange
+        await meshService.start();
+
+        // Create packet with route
+        final routePath = [
+          Uint8List.fromList([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01]),
+          Uint8List.fromList([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02]),
+          Uint8List.fromList([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03]),
+        ];
+
+        final packet = BitchatPacket(
+          type: 0x02,
+          timestamp: DateTime.now(),
+          payload: Uint8List.fromList([1, 2, 3]),
+          ttl: 7,
+          route: routePath,
+        );
+
+        // Act - simulate packet at each hop
+        for (int i = 0; i < routePath.length; i++) {
+          final routed = RoutedPacket(
+            packet: packet,
+            peerID: 'hop-$i',
+          );
+          await packetProcessor.processPacket(routed);
+        }
+
+        // Assert - packet relayed through all hops
+        expect(relayDelegate.relayedPackets.length, greaterThan(0));
+      });
+    });
+
+    group('Offline and Retry Scenarios', () {
+      test('should queue messages for offline peers', () async {
+        // Arrange
+        await meshService.start();
+        
+        // Add offline peer
+        peerManager.addPeer(PeerInfo(
+          id: 'peer-offline',
+          name: 'Offline Peer',
+          isConnected: false,
+          lastSeen: DateTime.now().millisecondsSinceEpoch - 300000,
+        ));
+
+        // Act - send message to offline peer
+        meshService.sendMessage('Message for offline peer');
+
+        // Assert - message queued
+        final pending = storeForwardManager.getPendingMessages();
+        expect(pending.length, greaterThan(0));
+        
+        // Peer remains offline
+        final peer = peerManager.getPeer('peer-offline');
+        expect(peer?.isConnected, isFalse);
+      });
+
+      test('should deliver queued messages when peer comes online', 
+          () async {
+        // Arrange
+        await meshService.start();
+        
+        // Add offline peer
+        peerManager.addPeer(PeerInfo(
+          id: 'peer-reconnect',
+          name: 'Reconnecting Peer',
+          isConnected: false,
+          lastSeen: DateTime.now().millisecondsSinceEpoch - 300000,
+        ));
+
+        // Queue message
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'offline-msg',
+          payload: 'Stored while offline',
+          destination: 'peer-reconnect',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+
+        // Act - peer comes online
+        peerManager.updatePeer(
+          'peer-reconnect',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        );
+
+        // Process queued message
+        final msg = storeForwardManager.dequeueMessage();
+
+        // Assert
+        expect(msg, isNotNull);
+        expect(msg?.destination, equals('peer-reconnect'));
+        expect(peerManager.getPeer('peer-reconnect')?.isConnected, isTrue);
+      });
+
+      test('should expire old offline messages', () async {
+        // Arrange
+        await meshService.start();
+        
+        // Create old message
+        final oldTimestamp =
+            DateTime.now().millisecondsSinceEpoch - 600000; // 10 min ago
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'old-offline-msg',
+          payload: 'Expired message',
+          destination: 'peer-offline',
+          timestamp: oldTimestamp,
+          type: StoreForwardMessageType.offline,
+        ));
+
+        // Act - clear expired
+        final removed = storeForwardManager.clearExpired(expiryMillisAgo: 300000);
+
+        // Assert
+        expect(removed, equals(1));
+        expect(
+          storeForwardManager.getPendingMessages()
+            .where((m) => m.id == 'old-offline-msg')
+            .length,
+          equals(0),
+        );
+      });
+
+      test('should handle peer connection drops during message send', 
+          () async {
+        // Arrange
+        await meshService.start();
+        
+        // Add peer
+        peerManager.addPeer(PeerInfo(
+          id: 'peer-flaky',
+          name: 'Flaky Peer',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        ));
+
+        // Queue message
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: 'flaky-msg',
+          payload: 'To flaky peer',
+          destination: 'peer-flaky',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+
+        // Act - peer disconnects
+        peerManager.updatePeer(
+          'peer-flaky',
+          isConnected: false,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        );
+
+        // Assert - message remains queued
+        final pending = storeForwardManager.getPendingMessages();
+        expect(pending.length, greaterThan(0));
+        
+        // Peer is offline
+        expect(peerManager.getPeer('peer-flaky')?.isConnected, isFalse);
+      });
+    });
+
+    group('Power State Change Scenarios', () {
+      test('should handle normal to power save transition', () async {
+        // Arrange
+        await meshService.start();
+        
+        // Set normal power state
+        powerManager.updatePowerState(
+          batteryLevel: 85,
+          isCharging: false,
+          isPowerSaveMode: false,
+          platform: 'android',
+          powerMode: PowerMode.balanced,
+        ));
+
+        // Send message in normal mode
+        meshService.sendMessage('Message in normal mode');
+
+        // Act - transition to power save
+        powerManager.updatePowerState(
+          batteryLevel: 15,
+          isCharging: false,
+          isPowerSaveMode: true,
+          platform: 'android',
+          powerMode: PowerMode.balanced,
+        ));
+
+        // Send message in power save mode
+        meshService.sendMessage('Message in power save mode');
+
+        // Assert - both messages queued
+        expect(storeForwardManager.getPendingMessages().length, greaterThan(1));
+        expect(powerManager.currentState.isPowerSaveMode, isTrue);
+      });
+
+      test('should handle power save to normal transition', () async {
+        // Arrange
+        await meshService.start();
+        
+        // Start in power save mode
+        powerManager.updatePowerState(
+          batteryLevel: 10,
+          isCharging: false,
+          isPowerSaveMode: true,
+          platform: 'ios',
+        ));
+
+        // Queue messages in power save
+        for (int i = 0; i < 3; i++) {
+          meshService.sendMessage('Power save message $i');
+        }
+
+        // Act - connect charger, exit power save
+        powerManager.updatePowerState(
+          batteryLevel: 25,
+          isCharging: true,
+          isPowerSaveMode: false,
+          platform: 'ios',
+        ));
+
+        // Send messages in normal mode
+        for (int i = 0; i < 3; i++) {
+          meshService.sendMessage('Normal mode message $i');
+        }
+
+        // Assert - all messages queued
+        expect(storeForwardManager.getPendingMessages().length, greaterThan(5));
+        expect(powerManager.currentState.isCharging, isTrue);
+        expect(powerManager.currentState.isPowerSaveMode, isFalse);
+      });
+
+      test('should handle battery drain during active mesh', () async {
+        // Arrange
+        await meshService.start();
+        
+        // Add active peers
+        for (int i = 1; i <= 5; i++) {
+          peerManager.addPeer(PeerInfo(
+            id: 'peer-$i',
+            name: 'Peer $i',
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
+
+        // Simulate battery drain
+        final batteryLevels = [100, 90, 80, 70, 60, 50, 40, 30, 20, 15, 10];
+        
+        // Act - drain battery while sending messages
+        for (final level in batteryLevels) {
+          powerManager.updatePowerState(PowerState(
+            batteryLevel: level,
+            isCharging: false,
+            isPowerSaveMode: level < 20,
+            platform: 'android',
+          powerMode: PowerMode.balanced,
+          ));
+          
+          if (level % 20 == 0) {
+            meshService.sendMessage('Message at $level%');
+          }
+        }
+
+        // Assert - system functional throughout drain
+        expect(peerManager.getAllPeers().length, equals(5));
+        expect(storeForwardManager.getPendingMessages().length, greaterThan(0));
+        expect(powerManager.currentState.batteryLevel, equals(10));
+        expect(powerManager.currentState.isPowerSaveMode, isTrue);
+      });
+    });
+
+    group('Multi-Peer Scenarios', () {
+      test('should handle broadcast to multiple peers', () async {
+        // Arrange
+        await meshService.start();
+        
+        // Add multiple peers
+        final peerIds = ['peer-1', 'peer-2', 'peer-3', 'peer-4', 'peer-5'];
+        for (final id in peerIds) {
+          peerManager.addPeer(PeerInfo(
+            id: id,
+            name: 'Peer $id',
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
+
+        // Act - send broadcast message
+        meshService.sendMessage('Broadcast to all');
+
+        // Assert
+        expect(peerManager.getAllPeers().length, equals(5));
+        expect(storeForwardManager.getPendingMessages().length, greaterThan(0));
+        
+        // Broadcast message should have mesh-broadcast destination
+        final broadcastMsgs = storeForwardManager.getPendingMessages()
+            .where((m) => m.destination == 'mesh-broadcast');
+        expect(broadcastMsgs.length, greaterThan(0));
+      });
+
+      test('should handle mixed online/offline peer network', () async {
+        // Arrange
+        await meshService.start();
+        
+        // Add mixed peers
+        final onlinePeers = ['peer-1', 'peer-2', 'peer-3'];
+        final offlinePeers = ['peer-4', 'peer-5'];
+        
+        for (final id in onlinePeers) {
+          peerManager.addPeer(PeerInfo(
+            id: id,
+            name: 'Online $id',
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
+        
+        for (final id in offlinePeers) {
+          peerManager.addPeer(PeerInfo(
+            id: id,
+            name: 'Offline $id',
+            isConnected: false,
+            lastSeen: DateTime.now().millisecondsSinceEpoch - 600000,
+          ));
+        }
+
+        // Act - send messages to each peer
+        for (final id in [...onlinePeers, ...offlinePeers]) {
+          storeForwardManager.enqueueMessage(StoreForwardMessage(
+            id: 'msg-to-$id',
+            payload: 'Message for $id',
+            destination: id,
+            timestamp: DateTime.now().millisecondsSinceEpoch,
+            type: StoreForwardMessageType.outbound,
+          ));
+        }
+
+        // Assert
+        expect(peerManager.getAllPeers().length, equals(5));
+        expect(storeForwardManager.getPendingMessages().length, equals(5));
+        
+        final connectedCount = peerManager.getAllPeers()
+            .where((p) => p.isConnected)
+            .length;
+        expect(connectedCount, equals(3));
+      });
+
+      test('should handle peer joining and leaving dynamically', () async {
+        // Arrange
+        await meshService.start();
+        
+        // Start with 3 peers
+        for (int i = 1; i <= 3; i++) {
+          peerManager.addPeer(PeerInfo(
+            id: 'peer-$i',
+            name: 'Peer $i',
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
+
+        // Act - peer 4 joins
+        peerManager.addPeer(PeerInfo(
+          id: 'peer-4',
+          name: 'New Peer',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        ));
+
+        // Peer 2 leaves
+        peerManager.updatePeer('peer-2', isConnected: false);
+
+        // Peer 5 joins
+        peerManager.addPeer(PeerInfo(
+          id: 'peer-5',
+          name: 'Another New Peer',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        ));
+
+        // Peer 1 leaves
+        peerManager.updatePeer('peer-1', isConnected: false);
+
+        // Assert
+        expect(peerManager.getAllPeers().length, equals(5));
+        
+        final connectedCount = peerManager.getAllPeers()
+            .where((p) => p.isConnected)
+            .length;
+        expect(connectedCount, equals(3)); // peer-3, peer-4, peer-5
+      });
+    });
+
+    group('Complex Real-World Scenarios', () {
+      test('should handle conference call scenario', () async {
+        // Arrange
+        await meshService.start();
+        
+        // Simulate conference participants
+        final participants = ['host', 'participant-1', 'participant-2', 
+                             'participant-3', 'participant-4'];
+        
+        for (final p in participants) {
+          peerManager.addPeer(PeerInfo(
+            id: p,
+            name: p.toUpperCase(),
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
+
+        // Act - host sends multiple messages
+        meshService.sendMessage('Welcome everyone!');
+        meshService.sendMessage('Let\'s get started.');
+        meshService.sendMessage('Agenda: 1. Updates 2. Discussion');
+
+        // Participants respond
+        for (final p in participants) {
+          if (p != 'host') {
+            storeForwardManager.enqueueMessage(StoreForwardMessage(
+              id: 'msg-from-$p',
+              payload: 'Response from $p',
+              destination: 'mesh-broadcast',
+              timestamp: DateTime.now().millisecondsSinceEpoch,
+              type: StoreForwardMessageType.inbound,
+            ));
+          }
+        }
+
+        // Assert
+        expect(peerManager.getAllPeers().length, equals(5));
+        expect(storeForwardManager.getPendingMessages().length, greaterThan(7));
+      });
+
+      test('should handle emergency broadcast scenario', () async {
+        // Arrange
+        await meshService.start();
+        
+        // Add emergency responders
+        final responders = ['responder-1', 'responder-2', 'responder-3'];
+        for (final r in responders) {
+          peerManager.addPeer(PeerInfo(
+            id: r,
+            name: 'Responder $r',
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
+
+        // Some responders offline
+        peerManager.updatePeer('responder-2', isConnected: false);
+
+        // Act - send emergency broadcast
+        meshService.sendMessage('EMERGENCY: Location confirmed',
+                                  channel: 'emergency');
+        meshService.sendMessage('Proceed to coordinates: 40.7128, -74.0060',
+                                  channel: 'emergency');
+
+        // Assert - messages queued for all responders
+        expect(peerManager.getAllPeers().length, equals(3));
+        expect(storeForwardManager.getPendingMessages().length, greaterThan(2));
+        
+        // Offline responder should have queued messages
+        final pendingForOffline = storeForwardManager.getPendingMessages()
+            .where((m) => m.destination == 'mesh-broadcast');
+        expect(pendingForOffline.length, greaterThan(0));
+      });
+
+      test('should handle file transfer with fragmentation', () async {
+        // Arrange
+        await meshService.start();
+        
+        peerManager.addPeer(PeerInfo(
+          id: 'peer-file',
+          name: 'File Recipient',
+          isConnected: true,
+          lastSeen: DateTime.now().millisecondsSinceEpoch,
+        ));
+
+        // Act - simulate large file transfer
+        final fileSize = 5000; // bytes
+        final fileData = Uint8List(fileSize);
+        for (int i = 0; i < fileSize; i++) {
+          fileData[i] = i % 256;
+        }
+
+        final filePacket = BitchatPacket(
+          type: 0x03, // File transfer type
+          timestamp: DateTime.now(),
+          payload: fileData,
+          ttl: 7,
+        );
+
+        // Fragment and process
+        final mySenderID = Uint8List.fromList([1, 2, 3, 4, 5, 6, 7, 8]);
+        final fragments = fragmentManager.createFragments(
+          filePacket,
+          mySenderID: mySenderID,
+        );
+
+        for (final fragment in fragments) {
+          final routed = RoutedPacket(
+            packet: fragment,
+            peerID: 'peer-file',
+          );
+          await packetProcessor.processPacket(routed);
+        }
+
+        // Assert
+        expect(fragments.length, greaterThan(10));
+        expect(fragmentDelegate.reassembledPackets.length, equals(1));
+        
+        final reassembled = fragmentDelegate.reassembledPackets.first;
+        expect(reassembled.payload?.length, equals(fileSize));
+      });
+
+      test('should handle network partition scenario', () async {
+        // Arrange
+        await meshService.start();
+        
+        // Create two network partitions
+        final partitionA = ['node-a1', 'node-a2', 'node-a3'];
+        final partitionB = ['node-b1', 'node-b2', 'node-b3'];
+        
+        for (final node in partitionA) {
+          peerManager.addPeer(PeerInfo(
+            id: node,
+            name: 'Partition A: $node',
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
+        
+        for (final node in partitionB) {
+          peerManager.addPeer(PeerInfo(
+            id: node,
+            name: 'Partition B: $node',
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
+
+        // Act - send messages within each partition
+        for (final node in partitionA) {
+          meshService.sendMessage('Message from $node', channel: 'partition-a');
+        }
+        
+        for (final node in partitionB) {
+          meshService.sendMessage('Message from $node', channel: 'partition-b');
+        }
+
+        // Simulate partition healing: nodes from A reconnect to B
+        // (In real mesh, this would be automatic route discovery)
+        
+        // Assert
+        expect(peerManager.getAllPeers().length, equals(6));
+        expect(storeForwardManager.getPendingMessages().length, greaterThan(5));
+      });
+    });
+
+    group('Stress and Performance Scenarios', () {
+      test('should handle rapid message bursts', () async {
+        // Arrange
+        await meshService.start();
+        
+        // Add peers
+        for (int i = 1; i <= 10; i++) {
+          peerManager.addPeer(PeerInfo(
+            id: 'peer-$i',
+            name: 'Peer $i',
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
+
+        // Act - send burst of messages
+        final burstCount = 50;
+        for (int i = 0; i < burstCount; i++) {
+          meshService.sendMessage('Burst message $i');
+        }
+
+        // Assert
+        expect(peerManager.getAllPeers().length, equals(10));
+        expect(storeForwardManager.getPendingMessages().length, greaterThan(burstCount));
+      });
+
+      test('should handle many peers simultaneously', () async {
+        // Arrange
+        await meshService.start();
+
+        // Act - add many peers
+        final peerCount = 50;
+        for (int i = 1; i <= peerCount; i++) {
+          peerManager.addPeer(PeerInfo(
+            id: 'peer-$i',
+            name: 'Peer $i',
+            isConnected: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
+
+        // Send broadcast to all
+        meshService.sendMessage('Hello everyone!');
+
+        // Assert
+        expect(peerManager.getAllPeers().length, equals(peerCount));
+        expect(storeForwardManager.getPendingMessages().length, greaterThan(0));
+      });
+
+      test('should handle mixed small and large messages', () async {
+        // Arrange
+        await meshService.start();
+
+        // Act - send mix of small and large messages
+        // Small messages (no fragmentation)
+        for (int i = 0; i < 20; i++) {
+          meshService.sendMessage('Small msg $i');
+        }
+
+        // Large messages (will be fragmented)
+        final largePayload = Uint8List(1000);
+        for (int i = 0; i < 5; i++) {
+          final packet = BitchatPacket(
+            type: 0x02,
+            timestamp: DateTime.now(),
+            payload: largePayload,
+            ttl: 7,
+          );
+          
+          final mySenderID = Uint8List.fromList([1, 2, 3, 4, 5, 6, 7, 8]);
+          final fragments = fragmentManager.createFragments(
+            packet,
+            mySenderID: mySenderID,
+          );
+
+          for (final fragment in fragments) {
+            final routed = RoutedPacket(
+              packet: fragment,
+              peerID: 'peer-$i',
+            );
+            await packetProcessor.processPacket(routed);
+          }
+        }
+
+        // Assert
+        expect(storeForwardManager.getPendingMessages().length, greaterThan(20));
+        expect(fragmentDelegate.reassembledPackets.length, equals(5));
+      });
+    });
+  });
+}

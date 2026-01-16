@@ -1,0 +1,20 @@
+{
+  "buildFiles": [
+    "/Users/avillagran/Desarrollo/flutter-sdk/flutter/packages/flutter_tools/gradle/src/main/groovy/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/Users/avillagran/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/Users/avillagran/Desarrollo/bitchat-flutter/android/app/.cxx/Debug/1k10m2c3/armeabi-v7a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/Users/avillagran/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/Users/avillagran/Desarrollo/bitchat-flutter/android/app/.cxx/Debug/1k10m2c3/armeabi-v7a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {}
+}

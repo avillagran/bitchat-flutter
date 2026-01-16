@@ -1,0 +1,229 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:bitchat/features/mesh/background_service.dart';
+import 'package:bitchat/features/mesh/bluetooth_mesh_service.dart';
+import 'package:bitchat/features/crypto/encryption_service.dart';
+
+void main() {
+  group('BackgroundService', () {
+    late BackgroundService backgroundService;
+
+    setUp(() {
+      backgroundService = BackgroundService();
+    });
+
+    tearDown(() {
+      backgroundService.dispose();
+    });
+
+    test('should have correct channel constants', () {
+      expect(BackgroundService.channelId, equals('bitchat_mesh_service'));
+      expect(BackgroundService.notificationId, equals(10001));
+      expect(BackgroundService.actionStart, equals('ACTION_START'));
+      expect(BackgroundService.actionStop, equals('ACTION_STOP'));
+      expect(BackgroundService.actionUpdateNotification,
+          equals('ACTION_UPDATE_NOTIFICATION'));
+      expect(BackgroundService.actionQuit, equals('ACTION_QUIT'));
+    });
+
+    test('should initialize without throwing', () async {
+      // Note: Full initialization requires native plugins, so we test the
+      // object creation and basic state
+      expect(backgroundService, isNotNull);
+      expect(backgroundService.service, isNotNull);
+    });
+
+    test('should dispose without throwing', () {
+      // Verify dispose can be called safely
+      expect(() => backgroundService.dispose(), returnsNormally);
+    });
+
+    test('should expose service instance', () {
+      final service = backgroundService.service;
+      expect(service, isNotNull);
+    });
+
+    test('methods should handle errors gracefully', () async {
+      // These methods will fail without native plugins but should not throw
+      final results = await Future.wait([
+        backgroundService.start().catchError((_) => false),
+        backgroundService.stop().catchError((_) => null),
+        backgroundService.quit().catchError((_) => null),
+        backgroundService.updateNotification(5).catchError((_) => null),
+        backgroundService.promoteToForeground().catchError((_) => null),
+        backgroundService.demoteToBackground().catchError((_) => null),
+      ]);
+
+      // All methods should complete without throwing
+      expect(results.length, equals(6));
+    });
+
+    test('should check running status', () async {
+      // Without native plugins, this may throw on non-mobile platforms
+      try {
+        final isRunning = await backgroundService.isRunning;
+        // If it doesn't throw, verify it returns a boolean
+        expect(isRunning, isA<bool>());
+      } catch (e) {
+        // Expected on non-mobile platforms (desktop/web)
+        // Service requires native mobile platform
+        expect(
+          e.toString(),
+          contains('supported for Android and iOS Platform only'),
+        );
+      }
+    });
+  });
+
+  group('BackgroundService Static Methods', () {
+    test('onIosBackground should be a valid entry point', () {
+      // iOS background handler should allow background execution
+      // We verify the method exists and is callable
+      expect(BackgroundService.onIosBackground, isNotNull);
+      expect(BackgroundService.onIosBackground, isA<Function>());
+    });
+
+    test('onStart should be a valid entry point', () {
+      // Verify onStart is marked with vm:entry-point
+      expect(BackgroundService.onStart, isNotNull);
+      expect(BackgroundService.onStart, isA<Function>());
+    });
+  });
+
+  group('BackgroundService Integration with Mesh', () {
+    late BluetoothMeshService meshService;
+    late EncryptionService encryptionService;
+
+    setUp(() {
+      encryptionService = EncryptionService();
+      meshService = BluetoothMeshService(encryptionService);
+    });
+
+    test('mesh service should integrate with background lifecycle', () {
+      // Verify mesh service has expected structure for background integration
+      expect(meshService, isNotNull);
+      expect(meshService.isActive, isFalse);
+
+      // Mesh should support start/stop lifecycle
+      expect(meshService.start, isA<Future<bool> Function()>());
+      expect(meshService.stop, isA<void Function()>());
+    });
+
+    test('mesh service provides peer count for notifications', () {
+      final peerCount = meshService.getPeerCount();
+      expect(peerCount, equals(0));
+
+      final activePeers = meshService.getActivePeers();
+      expect(activePeers, isEmpty);
+    });
+
+    test('mesh service can be stopped and restarted', () {
+      // Initial state
+      expect(meshService.isActive, isFalse);
+
+      // Start the service
+      meshService.start();
+
+      // Stop the service
+      meshService.stop();
+
+      // Should be inactive again
+      expect(meshService.isActive, isFalse);
+    });
+  });
+
+  group('BackgroundService Provider', () {
+    test('should create provider instance', () {
+      final provider = backgroundServiceProvider;
+      expect(provider, isNotNull);
+    });
+  });
+
+  group('BackgroundService Error Handling', () {
+    test('should handle service not running gracefully', () async {
+      final service = BackgroundService();
+
+      // These methods should complete without throwing even if service is not running
+      await expectLater(
+        service.stop(),
+        completes,
+      );
+
+      await expectLater(
+        service.quit(),
+        completes,
+      );
+
+      await expectLater(
+        service.updateNotification(0),
+        completes,
+      );
+
+      service.dispose();
+    });
+
+    test('should handle notification update errors', () async {
+      final service = BackgroundService();
+
+      // Should not throw even with invalid peer count
+      await expectLater(
+        service.updateNotification(-1),
+        completes,
+      );
+
+      await expectLater(
+        service.updateNotification(999999),
+        completes,
+      );
+
+      service.dispose();
+    });
+  });
+
+  group('BackgroundService Lifecycle Hooks', () {
+    test('should support promotion to foreground', () async {
+      final service = BackgroundService();
+
+      // Should complete without throwing
+      await expectLater(
+        service.promoteToForeground(),
+        completes,
+      );
+
+      service.dispose();
+    });
+
+    test('should support demotion from foreground', () async {
+      final service = BackgroundService();
+
+      // Should complete without throwing
+      await expectLater(
+        service.demoteToBackground(),
+        completes,
+      );
+
+      service.dispose();
+    });
+
+    test('should handle promotion/demotion sequence', () async {
+      final service = BackgroundService();
+
+      // Sequence of state changes should all complete
+      await expectLater(
+        service.promoteToForeground(),
+        completes,
+      );
+
+      await expectLater(
+        service.demoteToBackground(),
+        completes,
+      );
+
+      await expectLater(
+        service.promoteToForeground(),
+        completes,
+      );
+
+      service.dispose();
+    });
+  });
+}

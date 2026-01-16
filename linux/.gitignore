@@ -1,0 +1,9 @@
+flutter/ephemeral
+
+# LLM and agent files (local dev)
+../../.claude/
+../../.opencode/
+*.model
+*.bin
+agent_logs/
+agent_state.json

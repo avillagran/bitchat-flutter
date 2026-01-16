@@ -1,0 +1,17 @@
+# User-specified ignores (and safe variants)
+AGENTS.md
+TASKS.md
+TASKS_PART2.md
+pubspec.lock
+pubspeck.lock
+plan/
+tasks/
+.ralph-tui
+.raplh-tui
+thoughts/
+
+# Common extras (optional but harmless)
+.DS_Store
+node_modules/
+build/
+.dart_tool/

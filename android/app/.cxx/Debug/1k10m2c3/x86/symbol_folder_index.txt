@@ -1,0 +1,1 @@
+/Users/avillagran/Desarrollo/bitchat-flutter/build/app/intermediates/cxx/Debug/1k10m2c3/obj/x86

@@ -1,0 +1,15 @@
+# Flutter-related
+**/Flutter/ephemeral/
+**/Pods/
+
+# Xcode-related
+**/dgph
+**/xcuserdata/
+
+# LLM and agent files (local dev)
+../../.claude/
+../../.opencode/
+*.model
+*.bin
+agent_logs/
+agent_state.json

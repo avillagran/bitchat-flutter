@@ -1,0 +1,171 @@
+import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:bitchat/features/crypto/encryption_service.dart';
+import 'package:bitchat/features/mesh/gatt_server_manager.dart';
+import 'package:bitchat/features/mesh/gatt_client_manager.dart';
+import 'package:bitchat/features/mesh/peer_manager.dart';
+import 'package:bitchat/features/mesh/store_forward_manager.dart';
+import 'package:bitchat/features/mesh/power_manager.dart';
+import 'package:bitchat/data/models/bitchat_message.dart';
+import 'package:bitchat/data/models/routed_packet.dart';
+import 'package:bitchat/data/models/identity_announcement.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
+/// Central mesh service.
+/// Manages BLE services, peers, messages, and power policy.
+/// Modularly wired with PeerManager, StoreForwardManager, and PowerManager for full cross-platform compatibility.
+class BluetoothMeshService implements BluetoothConnectionManagerDelegate {
+  final EncryptionService _encryptionService;
+
+  /// BLE Peripheral (GATT Server/Advertiser). Handles advertising and server duties.
+  final GattServerManager _gattServerManager = GattServerManager();
+
+  /// BLE Central (GATT Client). Handles scanning, connections, and data exchange with peers.
+  final GattClientManager _gattClientManager = GattClientManager();
+
+  // New mesh infrastructure managers
+  final peerManager = PeerManager();
+  final storeForwardManager = StoreForwardManager();
+  final powerManager = PowerManager();
+
+  late final String myPeerID;
+  bool _isActive = false;
+  Timer? _announceTimer;
+
+  BluetoothMeshService(this._encryptionService) {
+    _gattClientManager.delegate = this;
+    myPeerID = "todo_fingerprint";
+    // Optional: register listeners for power state
+    powerManager.addPowerStateListener((state) {
+      // Example: adjust announce/scan periodicity based on battery
+      // if (state.isPowerSaveMode) ...
+    });
+  }
+
+  Future<void> start() async {
+    if (_isActive) return;
+
+    final sSuccess = await _gattServerManager.start();
+    final cSuccess = await _gattClientManager.start();
+
+    // Example: clean managers on startup
+    peerManager.getAllPeers().forEach((p) => peerManager.removePeer(p.id));
+    storeForwardManager.clearAll();
+    // PowerManager: in real integration, would set native callbacks here
+
+    if (sSuccess && cSuccess) {
+      _isActive = true;
+      _startPeriodicAnnounce();
+    }
+  }
+
+  void stop() {
+    _isActive = false;
+    _announceTimer?.cancel();
+    _gattServerManager.stop();
+    _gattClientManager.stop();
+    // Optional: clean or pause managers
+    // peerManager / storeForwardManager / powerManager: hooks for pause/dispose if needed
+  }
+
+  void _startPeriodicAnnounce() {
+    _announceTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (!_isActive) {
+        timer.cancel();
+        return;
+      }
+      _sendBroadcastAnnounce();
+    });
+  }
+
+  Future<void> _sendBroadcastAnnounce() async {
+    final announce = IdentityAnnouncement(
+      nickname: "Bitchat User",
+      noisePublicKey: _encryptionService.staticPublicKey,
+      signingPublicKey: _encryptionService.signingPublicKey,
+    );
+
+    final payload = announce.encode();
+    if (payload != null) {
+      // [STORE-FORWARD] Enqueue message broadcast for retry or forwarding
+      storeForwardManager.enqueueMessage(StoreForwardMessage(
+        id: "announce-t${DateTime.now().millisecondsSinceEpoch}",
+        payload: payload,
+        destination: "mesh-broadcast",
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        type: StoreForwardMessageType.outbound,
+      ));
+      // [PEER-MANAGER] Optional: register self-announcement as peer "self"
+      // peerManager.addPeer(...)
+      // [WIRE] TODO: Broadcast announce packet via GattServer if supported, or forward to connected peers via GattClient
+    }
+
+    void sendMessage(String content,
+        {List<String>? mentions, String? channel}) {
+      final msg = BitchatMessage(
+        sender: myPeerID,
+        content: content,
+        timestamp: DateTime.now(),
+        mentions: mentions,
+        channel: channel,
+      );
+
+      final binary = BitchatMessage.toBinaryPayload(msg);
+      if (binary != null) {
+        final packet = BitchatPacket(
+          payload: binary,
+          timestamp: DateTime.now(),
+          type: 0x02, // MessageType.message.value
+        );
+        // [STORE-FORWARD] Enqueue this message for safe retry if disconnected or no routes available
+        storeForwardManager.enqueueMessage(StoreForwardMessage(
+          id: "msg-t${DateTime.now().millisecondsSinceEpoch}",
+          payload: binary,
+          destination: "mesh-broadcast",
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          type: StoreForwardMessageType.outbound,
+        ));
+        // [WIRE] TODO: Broadcast packet via GattClient.sendPacket to connected peers or broadcast via server
+      }
+  }
+
+  @override
+  void onDeviceConnected(BluetoothDevice device) {
+    print("Mesh: Device connected ${device.remoteId}");
+  }
+
+  @override
+  void onDeviceDisconnected(BluetoothDevice device) {
+    print("Mesh: Device disconnected ${device.remoteId}");
+  }
+
+  @override
+  void onPacketReceived(
+      BitchatPacket packet, String peerID, BluetoothDevice device) {
+    print("Mesh: Packet received from $peerID");
+    // [PEER-MANAGER] Añadir/actualizar peer al recibir cualquier paquete
+    peerManager.addPeer(PeerInfo(
+      id: peerID,
+      name: peerID,
+      noisePublicKey: null, // Se podría extraer de handshake si se implementa
+      signingPublicKey: null,
+      isConnected: true,
+      lastSeen: DateTime.now().millisecondsSinceEpoch,
+      rssi: null,
+      transport: TransportType.bluetooth,
+      isVerifiedName: false,
+    ));
+    // [STORE-FORWARD] Posible: encolar delivery para ACK, procesamiento adicional…
+    // storeForwardManager.enqueueMessage(...)
+    // [POWER-MANAGER] Se podría decidir throttling/rate-limiting si modo ahorro está activo
+  }
+}
+
+final meshServiceProvider = Provider((ref) {
+  return BluetoothMeshService(ref.watch(encryptionServiceProvider));
+});
+
+
+final encryptionServiceProvider = Provider((ref) => EncryptionService());
+
+

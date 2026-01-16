@@ -3,6 +3,7 @@
 This repository contains the Flutter implementation of Bitchat — a cross-platform mesh/peer-to-peer chat application.
 
 Summary
+[![Install APK](https://img.shields.io/badge/Install-APK-green)](https://github.com/avillagran/bitchat-flutter/releases/download/v0.1/app-release.apk)
 - This Flutter project is maintained in parity with the native implementations:
   - Android reference: https://github.com/permissionlesstech/bitchat-android
   - iOS reference: https://github.com/permissionlesstech/bitchat
@@ -16,16 +17,11 @@ Complexity: High — includes BLE mesh networking, Noise-based cryptography, Nos
 ## Key Technical Decisions
 
 - State management: Riverpod
-- BLE: `flutter_blue_plus`
+- BLE: `bluetooth_low_energy`
 - Cryptography: Pure Dart (`pointycastle` / `cryptography`)
 - Flutter version: 3.27.4 (FVM)
 - Storage: Hive
 
-## Project Plan (Phases)
-1. [Setup and Infrastructure](plan/01-setup.md)
-2. [Data Models & Protocol](plan/02-protocol.md)
-3. [Cryptography & Noise](plan/03-crypto.md)
-... (see `plan/` folder for full plan)
 
 ## Getting Started
 1. Install [FVM](https://fvm.app/)
@@ -34,8 +30,11 @@ Complexity: High — includes BLE mesh networking, Noise-based cryptography, Nos
 4. `fvm flutter pub run build_runner build`
 
 ## Recent Changes (2026-01-16)
-- `.gitignore` files updated to exclude build artifacts, binaries, generated files, and local LLM/agent files (examples: `.claude/`, `.opencode/`, `*.model`, `agent_logs/`).
-- Documentation updated to reference official native repositories.
+
+- BLE platform plugin integrated via `bluetooth_low_energy` (platform implementations present for Android, iOS/darwin, Windows and Linux).
+- Pigeon-generated platform bindings restored (`packages/bluetooth_low_energy_bitchat/lib/src/my_api.g.dart`) to enable native <> Dart BLE APIs.
+- Release APK generated at `build/app/outputs/flutter-apk/app-release.apk` (will be uploaded as release asset `v0.1`).
+- Core libraries configured: Riverpod for state management, Hive for local storage, and `flutter_secure_storage` for credentials; cryptography libraries set up (`pointycastle`/`cryptography`).
 
 Security note
 - Do not commit secrets, keystores, or model files. Use secure storage and environment management for credentials.

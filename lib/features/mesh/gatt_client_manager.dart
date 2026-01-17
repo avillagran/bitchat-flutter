@@ -43,6 +43,19 @@ class GattClientManager {
   static const Duration _cleanupDelay =
       Duration(milliseconds: 500); // Match Android CONNECTION_CLEANUP_DELAY_MS
 
+  /// Track devices that failed "fast mode" service discovery.
+  /// These will use "slow mode" (longer delays) on next connection.
+  final Set<String> _slowModeDevices = {};
+
+  /// Track devices that failed even "slow mode" service discovery.
+  /// These will use "super slow mode" (even longer delays, no MTU, minimal operations).
+  /// macOS-specific: helps with Android devices that have PHY negotiation issues.
+  final Set<String> _superSlowModeDevices = {};
+
+  /// Track consecutive connection failures per device for exponential backoff.
+  /// macOS-specific: prevents hammering unstable connections.
+  final Map<String, int> _consecutiveFailures = {};
+
   /// Delegate to receive connection and packet events.
   BluetoothConnectionManagerDelegate? delegate;
 
@@ -157,11 +170,17 @@ class GattClientManager {
     _meshCharacteristics.clear();
     _connectionAttempts.clear();
     _connectingDevices.clear();
+    _slowModeDevices.clear();
+    _superSlowModeDevices.clear();
+    _consecutiveFailures.clear();
     debugPrint('$_tag Stopped');
   }
 
   /// Sets up all event subscriptions for the CentralManager.
   void _setupSubscriptions() {
+    final isDarwin = defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+
     // Listen for connection state changes
     _connectionStateSubscription =
         _central.connectionStateChanged.listen((event) {
@@ -170,6 +189,7 @@ class GattClientManager {
       if (event.state == ConnectionState.disconnected) {
         // Device disconnected
         debugPrint('$_tag Device $deviceUuid disconnected');
+        final wasConnected = _connectedDevices.containsKey(deviceUuid);
         final peripheral = _connectedDevices.remove(deviceUuid);
         _meshCharacteristics.remove(deviceUuid);
 
@@ -177,10 +197,29 @@ class GattClientManager {
           delegate?.onDeviceDisconnected(peripheral);
         }
 
-        // Cleanup after delay (matching Android pattern)
-        Future.delayed(_cleanupDelay, () {
-          _connectingDevices.remove(deviceUuid);
-        });
+        // DARWIN FIX: Prevent rapid reconnection after disconnect
+        // macOS + Android BLE connections are unstable due to PHY negotiation
+        // Adding device to _connectingDevices prevents immediate reconnect
+        if (isDarwin) {
+          // If device was successfully connected but disconnected unexpectedly,
+          // escalate to SLOW mode for next attempt (PHY instability likely)
+          if (wasConnected && !_slowModeDevices.contains(deviceUuid)) {
+            _slowModeDevices.add(deviceUuid);
+            debugPrint('$_tag [Darwin] Unexpected disconnect - escalating to SLOW mode for $deviceUuid');
+          }
+
+          _connectingDevices.add(deviceUuid);
+          debugPrint('$_tag [Darwin] Blocking reconnection for 3s after disconnect for $deviceUuid');
+          Future.delayed(const Duration(seconds: 3), () {
+            _connectingDevices.remove(deviceUuid);
+            debugPrint('$_tag [Darwin] Reconnection allowed for $deviceUuid');
+          });
+        } else {
+          // Non-Darwin: standard cleanup after short delay (matching Android pattern)
+          Future.delayed(_cleanupDelay, () {
+            _connectingDevices.remove(deviceUuid);
+          });
+        }
       }
     });
 
@@ -218,6 +257,8 @@ class GattClientManager {
   void _handleDiscovery(DiscoveredEventArgs event) async {
     final peripheral = event.peripheral;
     final deviceUuid = peripheral.uuid.toString();
+    final isDarwin = defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
 
     // Skip if already connected or currently connecting
     if (_connectedDevices.containsKey(deviceUuid)) return;
@@ -229,6 +270,10 @@ class GattClientManager {
       // Reset after a delay to allow future connection attempts
       Future.delayed(const Duration(minutes: 1), () {
         _connectionAttempts.remove(deviceUuid);
+        // Also reset failure tracking after cooldown
+        if (isDarwin) {
+          _consecutiveFailures.remove(deviceUuid);
+        }
       });
       return;
     }
@@ -236,34 +281,76 @@ class GattClientManager {
     _connectingDevices.add(deviceUuid);
     _connectionAttempts[deviceUuid] = attempts + 1;
 
-    debugPrint(
-        '$_tag Connecting to $deviceUuid (RSSI: ${event.rssi}, attempt ${attempts + 1}/$_maxConnectionRetries)');
+    // DARWIN: Log connection mode for debugging
+    if (isDarwin) {
+      final mode = _superSlowModeDevices.contains(deviceUuid)
+          ? 'SUPER_SLOW'
+          : _slowModeDevices.contains(deviceUuid)
+              ? 'SLOW'
+              : 'FAST';
+      final failures = _consecutiveFailures[deviceUuid] ?? 0;
+      debugPrint(
+          '$_tag [Darwin] Connecting to $deviceUuid (mode: $mode, failures: $failures, attempt ${attempts + 1}/$_maxConnectionRetries, RSSI: ${event.rssi})');
+    } else {
+      debugPrint(
+          '$_tag Connecting to $deviceUuid (RSSI: ${event.rssi}, attempt ${attempts + 1}/$_maxConnectionRetries)');
+    }
 
     try {
       await _connectToDevice(peripheral);
       _connectionAttempts.remove(deviceUuid); // Reset on success
+      _connectingDevices.remove(deviceUuid);
+      // DARWIN: Reset consecutive failures on success
+      if (isDarwin) {
+        _consecutiveFailures.remove(deviceUuid);
+        debugPrint('$_tag [Darwin] Connection SUCCESS for $deviceUuid - reset failure counter');
+      }
     } catch (e) {
       debugPrint('$_tag Connection failed for $deviceUuid: $e');
       _connectedDevices.remove(deviceUuid);
       _meshCharacteristics.remove(deviceUuid);
 
-      // Schedule reconnection attempt
-      if (_isActive && attempts + 1 < _maxConnectionRetries) {
-        Future.delayed(_reconnectDelay, () {
+      // DARWIN: Track consecutive failures for exponential backoff
+      if (isDarwin) {
+        final failures = (_consecutiveFailures[deviceUuid] ?? 0) + 1;
+        _consecutiveFailures[deviceUuid] = failures;
+
+        // Exponential backoff: 2s, 4s, 8s, max 16s
+        final backoffSeconds = (2 * (1 << (failures - 1).clamp(0, 3)));
+        debugPrint('$_tag [Darwin] Failure #$failures for $deviceUuid - backoff ${backoffSeconds}s');
+
+        Future.delayed(Duration(seconds: backoffSeconds), () {
+          _connectingDevices.remove(deviceUuid);
+        });
+      } else {
+        // Non-Darwin: standard 2s delay
+        Future.delayed(const Duration(seconds: 2), () {
           _connectingDevices.remove(deviceUuid);
         });
       }
-    } finally {
-      _connectingDevices.remove(deviceUuid);
     }
   }
 
   /// Connects to a peripheral with proper GATT operation sequencing.
   ///
+  /// Uses tri-strategy for Darwin connecting to potentially unstable devices:
+  /// - Fast mode: Minimal delays, try service discovery before PHY negotiation settles
+  /// - Slow mode: Long delays (3s+), for devices that failed fast mode
+  /// - Super slow mode: Very long delays (5s+), no MTU, single discovery attempt
+  ///
   /// Follows Android BluetoothGattClientManager pattern:
   /// connect -> delay -> MTU -> delay -> discover -> delay -> setNotify -> delay -> ready
   Future<void> _connectToDevice(Peripheral peripheral) async {
     final deviceUuid = peripheral.uuid.toString();
+    final isDarwin = defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    final useSuperSlowMode = _superSlowModeDevices.contains(deviceUuid);
+    final useSlowMode = _slowModeDevices.contains(deviceUuid) || useSuperSlowMode;
+
+    if (isDarwin) {
+      final mode = useSuperSlowMode ? 'SUPER_SLOW' : useSlowMode ? 'SLOW' : 'FAST';
+      debugPrint('$_tag [Darwin] Connection mode: $mode for $deviceUuid');
+    }
 
     // Step 1: Connect with timeout
     await _central.connect(peripheral).timeout(
@@ -275,11 +362,57 @@ class GattClientManager {
     _connectedDevices[deviceUuid] = peripheral;
     debugPrint('$_tag Connected to $deviceUuid');
 
-    // Delay before MTU negotiation (matching Android 200ms)
-    await Future.delayed(_operationDelay);
+    // Step 2: For Darwin FAST mode, try service discovery IMMEDIATELY
+    // The goal is to complete discovery before PHY negotiation causes instability
+    if (isDarwin && !useSlowMode) {
+      debugPrint('$_tag [Darwin] FAST mode: Attempting immediate service discovery for $deviceUuid');
+      final fastServices = await _attemptFastServiceDiscovery(peripheral);
+      if (fastServices != null && fastServices.isNotEmpty) {
+        debugPrint('$_tag [Darwin] FAST mode SUCCESS: Found ${fastServices.length} services');
+        await _completeConnectionSetup(peripheral, fastServices);
+        return;
+      }
+      // Fast mode failed - mark for slow mode on next connection
+      debugPrint('$_tag [Darwin] FAST mode FAILED for $deviceUuid - will use SLOW mode on reconnect');
+      _slowModeDevices.add(deviceUuid);
+      // Disconnect and throw to trigger reconnection
+      try {
+        await _central.disconnect(peripheral);
+      } catch (_) {}
+      _connectedDevices.remove(deviceUuid);
+      throw Exception('Fast service discovery failed, reconnecting with slow mode');
+    }
 
-    // Step 2: MTU Negotiation (if enabled)
-    if (AppConstants.requestMtu) {
+    // Step 3: Slow/Super-Slow mode - longer delays for stability
+    final Duration postConnectDelay;
+    if (isDarwin && useSuperSlowMode) {
+      postConnectDelay = const Duration(milliseconds: 5000); // Super slow: 5s delay
+      debugPrint('$_tag [Darwin] SUPER_SLOW mode: 5s post-connect delay for $deviceUuid');
+    } else if (isDarwin && useSlowMode) {
+      postConnectDelay = const Duration(milliseconds: 3000); // Slow: 3s delay
+      debugPrint('$_tag [Darwin] SLOW mode: 3s post-connect delay for $deviceUuid');
+    } else if (isDarwin) {
+      postConnectDelay = const Duration(milliseconds: 500);
+    } else {
+      postConnectDelay = _operationDelay;
+    }
+    debugPrint('$_tag Post-connect delay: ${postConnectDelay.inMilliseconds}ms for $deviceUuid');
+    await Future.delayed(postConnectDelay);
+
+    // CRITICAL: Verify connection still valid after delay
+    // Connection can drop during the delay, especially on unstable BLE links
+    if (!_connectedDevices.containsKey(deviceUuid)) {
+      debugPrint('$_tag Connection dropped during post-connect delay for $deviceUuid');
+      // DARWIN: Escalate to super slow mode if slow mode fails
+      if (isDarwin && useSlowMode && !useSuperSlowMode) {
+        debugPrint('$_tag [Darwin] SLOW mode connection dropped - escalating to SUPER_SLOW');
+        _superSlowModeDevices.add(deviceUuid);
+      }
+      throw Exception('Connection dropped during setup delay');
+    }
+
+    // Step 4: MTU Negotiation (skip in Darwin slow/super-slow mode to reduce instability)
+    if (AppConstants.requestMtu && !(isDarwin && useSlowMode)) {
       try {
         debugPrint(
             '$_tag Requesting MTU ${AppConstants.requestedMtuSize} for $deviceUuid');
@@ -293,25 +426,53 @@ class GattClientManager {
         // Continue anyway - some devices don't support MTU negotiation
       }
       await Future.delayed(_operationDelay);
+    } else if (isDarwin && useSlowMode) {
+      debugPrint('$_tag [Darwin] ${useSuperSlowMode ? "SUPER_SLOW" : "SLOW"} mode: Skipping MTU negotiation for stability');
     } else {
       debugPrint('$_tag MTU negotiation disabled for $deviceUuid');
     }
 
-    // Step 3: Discover GATT services (with retry for flaky connections)
+    // Step 5: Discover GATT services (with retry for flaky connections)
     List<GATTService> services = [];
     const maxDiscoveryRetries = 3;
     for (int attempt = 1; attempt <= maxDiscoveryRetries; attempt++) {
+      // Check connection still valid before each attempt
+      if (!_connectedDevices.containsKey(deviceUuid)) {
+        debugPrint('$_tag Connection lost before discovery attempt $attempt for $deviceUuid');
+        throw Exception('Connection lost before service discovery');
+      }
+
       debugPrint(
           '$_tag Discovering GATT services for $deviceUuid (attempt $attempt/$maxDiscoveryRetries)');
-      services = await _central.discoverGATT(peripheral);
+      debugPrint('$_tag >>> Calling discoverGATT at ${DateTime.now()}');
+      try {
+        services = await _central.discoverGATT(peripheral).timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            debugPrint('$_tag !!! discoverGATT TIMEOUT after 10s for $deviceUuid');
+            return <GATTService>[];
+          },
+        );
+        debugPrint('$_tag <<< discoverGATT returned at ${DateTime.now()} with ${services.length} services');
+      } catch (e) {
+        debugPrint('$_tag !!! discoverGATT EXCEPTION: $e');
+        // Any exception during discovery likely means connection issue
+        _connectedDevices.remove(deviceUuid);
+        throw Exception('Service discovery failed: $e');
+      }
       debugPrint('$_tag Found ${services.length} services on $deviceUuid');
 
       if (services.isNotEmpty) break;
 
-      // Retry with delay if no services found
+      // Retry with delay if no services found (only if still connected)
       if (attempt < maxDiscoveryRetries) {
         debugPrint('$_tag No services found, retrying after delay...');
-        await Future.delayed(const Duration(milliseconds: 500));
+        await Future.delayed(const Duration(milliseconds: 1000));
+        // Connection might drop during delay
+        if (!_connectedDevices.containsKey(deviceUuid)) {
+          debugPrint('$_tag Connection dropped during retry delay for $deviceUuid');
+          throw Exception('Connection dropped during service discovery retry');
+        }
       }
     }
 
@@ -366,6 +527,120 @@ class GattClientManager {
         '$_tag Connection setup complete for $deviceUuid (notifications=${notificationsEnabled ? "enabled" : "failed"})');
   }
 
+  /// Attempts fast service discovery (minimal delay) for Darwin.
+  /// Returns services if successful, null if failed.
+  /// This tries to complete discovery before PHY negotiation causes instability.
+  Future<List<GATTService>?> _attemptFastServiceDiscovery(Peripheral peripheral) async {
+    final deviceUuid = peripheral.uuid.toString();
+
+    // Very short delay - just enough for connection to establish
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    try {
+      debugPrint('$_tag Fast discovery: Calling discoverGATT immediately for $deviceUuid');
+      final services = await _central.discoverGATT(peripheral).timeout(
+        const Duration(seconds: 5), // Shorter timeout for fast mode
+        onTimeout: () {
+          debugPrint('$_tag Fast discovery: TIMEOUT for $deviceUuid');
+          return <GATTService>[];
+        },
+      );
+
+      if (services.isNotEmpty) {
+        debugPrint('$_tag Fast discovery: SUCCESS - found ${services.length} services for $deviceUuid');
+        return services;
+      }
+      debugPrint('$_tag Fast discovery: No services found for $deviceUuid');
+      return null;
+    } catch (e) {
+      debugPrint('$_tag Fast discovery: FAILED for $deviceUuid - $e');
+      return null;
+    }
+  }
+
+  /// Completes connection setup after services have been discovered.
+  /// Used by fast mode to finish setup after successful immediate discovery.
+  Future<void> _completeConnectionSetup(Peripheral peripheral, List<GATTService> services) async {
+    final deviceUuid = peripheral.uuid.toString();
+
+    // Verify connection still valid
+    if (!_connectedDevices.containsKey(deviceUuid)) {
+      throw Exception('Connection lost before setup completion');
+    }
+
+    // Find our mesh service and characteristic
+    GATTCharacteristic? meshCharacteristic;
+    final meshServiceUuid = UUID.fromString(AppConstants.meshServiceUuid);
+    final meshCharUuid = UUID.fromString(AppConstants.meshCharacteristicUuid);
+
+    for (var service in services) {
+      if (service.uuid == meshServiceUuid) {
+        debugPrint('$_tag Found mesh service on $deviceUuid');
+
+        for (var characteristic in service.characteristics) {
+          if (characteristic.uuid == meshCharUuid) {
+            meshCharacteristic = characteristic;
+            debugPrint('$_tag Found mesh characteristic on $deviceUuid');
+            debugPrint(
+                '$_tag   Properties: notify=${characteristic.properties.contains(GATTCharacteristicProperty.notify)}, indicate=${characteristic.properties.contains(GATTCharacteristicProperty.indicate)}, write=${characteristic.properties.contains(GATTCharacteristicProperty.write)}, writeNoResponse=${characteristic.properties.contains(GATTCharacteristicProperty.writeWithoutResponse)}');
+            break;
+          }
+        }
+        break;
+      }
+    }
+
+    if (meshCharacteristic == null) {
+      throw Exception('Mesh characteristic not found on $deviceUuid');
+    }
+
+    // Cache the characteristic for later use
+    _meshCharacteristics[deviceUuid] = meshCharacteristic;
+
+    // Minimal delay before notifications
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    // Check connection still valid before notifications
+    if (!_connectedDevices.containsKey(deviceUuid)) {
+      throw Exception('Connection lost before enabling notifications');
+    }
+
+    // Enable notifications (with single attempt for fast mode, don't retry aggressively)
+    bool notificationsEnabled = false;
+    try {
+      debugPrint('$_tag Enabling notifications for $deviceUuid (single attempt)');
+      await _central
+          .setCharacteristicNotifyState(
+            peripheral,
+            meshCharacteristic,
+            state: true,
+          )
+          .timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => throw TimeoutException('setNotifyState timed out'),
+          );
+      notificationsEnabled = true;
+      debugPrint('$_tag Notifications enabled for $deviceUuid');
+    } catch (e) {
+      debugPrint('$_tag Failed to enable notifications on $deviceUuid: $e');
+      // Check if connection is still valid - if not, throw
+      if (!_connectedDevices.containsKey(deviceUuid)) {
+        throw Exception('Connection lost during notification setup');
+      }
+      // Continue anyway - we might still be able to write to the device
+    }
+
+    // Final connection check
+    if (!_connectedDevices.containsKey(deviceUuid)) {
+      throw Exception('Connection lost after setup');
+    }
+
+    // Notify delegate - connection complete
+    delegate?.onDeviceConnected(peripheral);
+    debugPrint(
+        '$_tag Connection setup complete for $deviceUuid (notifications=${notificationsEnabled ? "enabled" : "failed"})');
+  }
+
   /// Enables notifications with retry logic.
   Future<void> _enableNotificationsWithRetry(
     Peripheral peripheral,
@@ -413,13 +688,17 @@ class GattClientManager {
     if (value.isEmpty) return;
 
     final deviceUuid = peripheral.uuid.toString();
+    debugPrint('$_tag *** NOTIFICATION RECEIVED from $deviceUuid: ${value.length} bytes ***');
+
     final packet = BitchatPacket.decode(value);
 
     if (packet != null) {
+      debugPrint('$_tag Decoded packet successfully from $deviceUuid');
       delegate?.onPacketReceived(packet, deviceUuid, peripheral);
     } else {
       debugPrint(
-          '$_tag Failed to decode packet from $deviceUuid (${value.length} bytes)');
+          '$_tag Failed to decode packet from $deviceUuid (${value.length} bytes) - may need reassembly');
+      debugPrint('$_tag   First bytes: ${value.take(20).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
     }
   }
 
@@ -510,13 +789,32 @@ class GattClientManager {
 
   /// Returns debug information about the manager state.
   Map<String, dynamic> getDebugInfo() {
+    final isDarwin = defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
     return {
       'isActive': _isActive,
+      'platform': isDarwin ? 'Darwin' : 'Other',
       'connectedDevices': _connectedDevices.keys.toList(),
       'connectingDevices': _connectingDevices.toList(),
       'connectionAttempts': Map.from(_connectionAttempts),
       'cachedCharacteristics': _meshCharacteristics.keys.toList(),
+      'slowModeDevices': _slowModeDevices.toList(),
+      if (isDarwin) 'superSlowModeDevices': _superSlowModeDevices.toList(),
+      if (isDarwin) 'consecutiveFailures': Map.from(_consecutiveFailures),
     };
+  }
+
+  /// Reset slow mode for all devices (useful after app restart or network change).
+  /// Devices in slow mode will retry with fast mode on next connection.
+  void resetAllSlowModes() {
+    final slowCount = _slowModeDevices.length;
+    final superSlowCount = _superSlowModeDevices.length;
+    _slowModeDevices.clear();
+    _superSlowModeDevices.clear();
+    _consecutiveFailures.clear();
+    if (slowCount > 0 || superSlowCount > 0) {
+      debugPrint('$_tag Reset slow mode for $slowCount devices, super-slow for $superSlowCount devices');
+    }
   }
 
   // ---------------------------------------------------------------------------

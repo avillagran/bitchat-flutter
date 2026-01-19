@@ -19,6 +19,9 @@ node_modules/
 build/
 .dart_tool/
 
+# Local Xcode/SwiftPM artifacts
+_Users_avillagran_.swiftpm.lock
+
 run.sh
 run_sh_output_exec.txt
 

@@ -22,6 +22,11 @@ build/
 # Local Xcode/SwiftPM artifacts
 _Users_avillagran_.swiftpm.lock
 
+# Generated output artifacts (do not commit)
+build_runner_output.txt
+pub_get_output.txt
+run_after_gen.txt
+
 run.sh
 run_sh_output_exec.txt
 

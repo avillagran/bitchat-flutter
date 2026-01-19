@@ -19,6 +19,10 @@ node_modules/
 build/
 .dart_tool/
 
+# Flutter generated plugin files (do not commit)
+.flutter-plugins
+.flutter-plugins-dependencies
+
 # Local Xcode/SwiftPM artifacts
 _Users_avillagran_.swiftpm.lock
 

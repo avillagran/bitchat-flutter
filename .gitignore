@@ -3,12 +3,15 @@ AGENTS.md
 TASKS.md
 TASKS_PART2.md
 pubspec.lock
-pubspeck.lock
+pupspeck.lock
 plan/
 tasks/
 .ralph-tui
 .raplh-tui
 thoughts/
+
+# Claude agent cache and outputs (do not commit)
+.claude/
 
 # Common extras (optional but harmless)
 .DS_Store
@@ -18,3 +21,4 @@ build/
 
 run.sh
 run_sh_output_exec.txt
+

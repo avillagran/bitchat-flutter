@@ -20,6 +20,12 @@ class MyPeripheralDelegate: NSObject, CBPeripheralDelegate {
     }
     
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        NSLog("[BLE-Bitchat] DELEGATE: didDiscoverServices called for \(peripheral.identifier.uuidString)")
+        if let error = error {
+            NSLog("[BLE-Bitchat] DELEGATE: didDiscoverServices error: \(error.localizedDescription)")
+        } else {
+            NSLog("[BLE-Bitchat] DELEGATE: didDiscoverServices success, services count: \(peripheral.services?.count ?? 0)")
+        }
         mCentralManager.didDiscoverServices(peripheral: peripheral, error: error)
     }
     

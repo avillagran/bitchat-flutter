@@ -40,6 +40,19 @@ class GattServerManager {
   /// Current value stored in the characteristic (for read requests)
   Uint8List _characteristicValue = Uint8List(0);
 
+  /// BLE reassembly buffer per central (for handling low MTU chunked writes)
+  /// Key: central UUID, Value: accumulated bytes
+  final Map<String, List<int>> _reassemblyBuffer = {};
+
+  /// Timestamp of last data received per central (for timeout cleanup)
+  final Map<String, DateTime> _reassemblyTimestamp = {};
+
+  /// Maximum reassembly buffer size (prevent memory exhaustion)
+  static const int _maxReassemblyBufferSize = 2048;
+
+  /// Reassembly timeout in milliseconds
+  static const int _reassemblyTimeoutMs = 5000;
+
   /// Stream subscriptions
   StreamSubscription<BluetoothLowEnergyStateChangedEventArgs>?
       _stateSubscription;
@@ -374,15 +387,20 @@ class GattServerManager {
     });
 
     // Listen for descriptor write requests (e.g., CCCD writes from centrals)
-    _descriptorWriteSubscription =
-        _peripheralManager.descriptorWriteRequested.listen((eventArgs) {
-      debugPrint('$_tag Event fired: descriptorWriteRequested');
-      debugPrint(
-          '$_tag Descriptor write details: descriptor=${eventArgs.descriptor.uuid}, central=${eventArgs.central.uuid}, value=${eventArgs.request.value}');
-      _handleDescriptorWriteRequest(eventArgs);
-      debugPrint(
-          '$_tag After handling descriptor write - subscribedCount=${_subscribedCentrals.length}');
-    });
+    // Note: This is not supported on Darwin (macOS/iOS) - the framework handles CCCD internally
+    if (!Platform.isMacOS && !Platform.isIOS) {
+      _descriptorWriteSubscription =
+          _peripheralManager.descriptorWriteRequested.listen((eventArgs) {
+        debugPrint('$_tag Event fired: descriptorWriteRequested');
+        debugPrint(
+            '$_tag Descriptor write details: descriptor=${eventArgs.descriptor.uuid}, central=${eventArgs.central.uuid}, value=${eventArgs.request.value}');
+        _handleDescriptorWriteRequest(eventArgs);
+        debugPrint(
+            '$_tag After handling descriptor write - subscribedCount=${_subscribedCentrals.length}');
+      });
+    } else {
+      debugPrint('$_tag Skipping descriptorWriteRequested listener (not supported on Darwin)');
+    }
 
     debugPrint('$_tag Event listeners set up');
   }
@@ -392,11 +410,22 @@ class GattServerManager {
     // Remove any existing services first
     await _peripheralManager.removeAllServices();
 
-    // Create the CCCD descriptor for notification subscriptions
-    final cccdDescriptor = GATTDescriptor.immutable(
-      uuid: UUID.fromString(AppConstants.meshDescriptorUuid),
-      value: Uint8List.fromList([0x00, 0x00]),
-    );
+    // Create descriptors list - CCCD is handled automatically on Darwin
+    // Adding CCCD manually on Darwin causes CBErrorDomain Code=1 "invalid parameters"
+    final List<GATTDescriptor> descriptors;
+    if (Platform.isMacOS || Platform.isIOS) {
+      // Darwin: CoreBluetooth automatically adds CCCD when notify property is set
+      descriptors = [];
+      debugPrint('$_tag Darwin: Skipping manual CCCD descriptor (handled by framework)');
+    } else {
+      // Android/Windows: Need to add CCCD descriptor manually
+      final cccdDescriptor = GATTDescriptor.immutable(
+        uuid: UUID.fromString(AppConstants.meshDescriptorUuid),
+        value: Uint8List.fromList([0x00, 0x00]),
+      );
+      descriptors = [cccdDescriptor];
+      debugPrint('$_tag Added CCCD descriptor for non-Darwin platform');
+    }
 
     // Create the mesh characteristic with read/write/notify support
     // Using the factory method for mutable characteristics
@@ -412,9 +441,9 @@ class GattServerManager {
         GATTCharacteristicPermission.read,
         GATTCharacteristicPermission.write,
       ],
-      descriptors: [cccdDescriptor], // CCCD for notification subscriptions
+      descriptors: descriptors,
     );
-    debugPrint('$_tag Created characteristic with CCCD descriptor');
+    debugPrint('$_tag Created characteristic with ${descriptors.length} descriptors');
 
     // Create the mesh service
     final service = GATTService(
@@ -449,8 +478,12 @@ class GattServerManager {
       ];
     }
 
+    // On macOS, don't include name to minimize advertisement size
+    // This helps ensure legacy advertising mode which Android's scanner can see
+    final String? advertiseName = Platform.isMacOS ? null : 'bitchat';
+
     final advertisement = Advertisement(
-      name: 'bitchat',
+      name: advertiseName,
       serviceUUIDs: [UUID.fromString(AppConstants.meshServiceUuid)],
       manufacturerSpecificData: manufacturerData,
     );
@@ -458,7 +491,7 @@ class GattServerManager {
     await _peripheralManager.startAdvertising(advertisement);
 
     debugPrint('$_tag Advertising started with:');
-    debugPrint('$_tag   Name: bitchat');
+    debugPrint('$_tag   Name: ${advertiseName ?? "(none - macOS legacy mode)"}');
     debugPrint('$_tag   Service UUID: ${AppConstants.meshServiceUuid}');
   }
 
@@ -497,7 +530,11 @@ class GattServerManager {
     }
   }
 
-  /// Handles write requests on the mesh characteristic
+  /// Handles write requests on the mesh characteristic with BLE reassembly support.
+  ///
+  /// When Android sends packets without MTU negotiation, data arrives in 20-byte chunks.
+  /// This method accumulates chunks until a complete packet is received, then passes
+  /// it to the delegate.
   void _handleWriteRequest(
       GATTCharacteristicWriteRequestedEventArgs eventArgs) async {
     if (!_isActive) {
@@ -511,35 +548,162 @@ class GattServerManager {
     final data = request.value;
 
     debugPrint('$_tag ========================================');
-    debugPrint('$_tag WRITE REQUEST RECEIVED FROM ANDROID');
+    debugPrint('$_tag WRITE REQUEST RECEIVED');
     debugPrint('$_tag Central: $centralAddress');
-    debugPrint('$_tag Data size: ${data.length} bytes');
-    debugPrint('$_tag Raw bytes (first 40): ${data.take(40).toList()}');
-    debugPrint('$_tag Delegate is ${delegate == null ? "NULL" : "SET"}');
+    debugPrint('$_tag Chunk size: ${data.length} bytes');
     debugPrint('$_tag ========================================');
 
     // Track connected central
     _connectedCentrals[centralAddress] = central;
 
-    // Update characteristic value
-    _characteristicValue = data;
-
-    // Respond to the write request (required for write-with-response)
+    // Respond to the write request immediately (required for write-with-response)
     try {
       await _peripheralManager.respondWriteRequest(request);
-      debugPrint('$_tag Write request response sent successfully');
     } catch (e) {
       debugPrint('$_tag Error responding to write request: $e');
     }
 
-    // Notify delegate about received data
-    if (data.isNotEmpty) {
-      debugPrint('$_tag Calling delegate.onDataReceived...');
-      delegate?.onDataReceived(data, centralAddress);
-      debugPrint('$_tag delegate.onDataReceived call completed');
-    } else {
-      debugPrint('$_tag Data is empty, not calling delegate');
+    if (data.isEmpty) {
+      debugPrint('$_tag Data is empty, ignoring');
+      return;
     }
+
+    // Check for timeout on existing buffer
+    final lastTimestamp = _reassemblyTimestamp[centralAddress];
+    if (lastTimestamp != null) {
+      final elapsed = DateTime.now().difference(lastTimestamp).inMilliseconds;
+      if (elapsed > _reassemblyTimeoutMs) {
+        debugPrint('$_tag Reassembly timeout for $centralAddress, clearing buffer');
+        _reassemblyBuffer.remove(centralAddress);
+        _reassemblyTimestamp.remove(centralAddress);
+      }
+    }
+
+    // Initialize or get existing buffer
+    _reassemblyBuffer[centralAddress] ??= [];
+    final buffer = _reassemblyBuffer[centralAddress]!;
+
+    // Append new data
+    buffer.addAll(data);
+    _reassemblyTimestamp[centralAddress] = DateTime.now();
+
+    debugPrint('$_tag Buffer now has ${buffer.length} bytes for $centralAddress');
+
+    // Check buffer size limit
+    if (buffer.length > _maxReassemblyBufferSize) {
+      debugPrint('$_tag Buffer exceeded max size, clearing for $centralAddress');
+      _reassemblyBuffer.remove(centralAddress);
+      _reassemblyTimestamp.remove(centralAddress);
+      return;
+    }
+
+    // Try to extract complete packets from buffer
+    _tryProcessBuffer(centralAddress);
+  }
+
+  /// Attempts to process complete packets from the reassembly buffer.
+  /// Uses packet header to determine expected size.
+  void _tryProcessBuffer(String centralAddress) {
+    final buffer = _reassemblyBuffer[centralAddress];
+    if (buffer == null || buffer.isEmpty) return;
+
+    // Need at least minimum header size to determine packet structure
+    // V1: 14 bytes header + 8 bytes sender = 22 minimum
+    // V2: 16 bytes header + 8 bytes sender = 24 minimum
+    const minHeaderV1 = 14;
+    const minHeaderV2 = 16;
+    const senderIdSize = 8;
+
+    while (buffer.length >= minHeaderV1 + senderIdSize) {
+      final version = buffer[0];
+
+      // Validate version
+      if (version != 1 && version != 2) {
+        debugPrint('$_tag Invalid version $version in buffer, clearing');
+        _reassemblyBuffer.remove(centralAddress);
+        _reassemblyTimestamp.remove(centralAddress);
+        return;
+      }
+
+      final headerSize = version == 1 ? minHeaderV1 : minHeaderV2;
+      final minSize = headerSize + senderIdSize;
+
+      if (buffer.length < minSize) {
+        debugPrint('$_tag Need $minSize bytes for header, have ${buffer.length}, waiting...');
+        return; // Need more data
+      }
+
+      // Parse header to calculate expected size
+      // Header: version(1) + type(1) + ttl(1) + timestamp(8) + flags(1) + payloadLength(2 or 4)
+      final flags = buffer[11]; // flags at offset 11 (after version+type+ttl+timestamp)
+      final hasRecipient = (flags & 0x01) != 0;
+      final hasSignature = (flags & 0x02) != 0;
+      final hasRoute = (version >= 2) && (flags & 0x08) != 0;
+
+      // Read payload length
+      final int payloadLength;
+      if (version >= 2) {
+        if (buffer.length < 16) {
+          debugPrint('$_tag Need 16 bytes for V2 header, have ${buffer.length}, waiting...');
+          return;
+        }
+        payloadLength = (buffer[12] << 24) | (buffer[13] << 16) | (buffer[14] << 8) | buffer[15];
+      } else {
+        payloadLength = (buffer[12] << 8) | buffer[13];
+      }
+
+      // Calculate expected total size
+      int expectedSize = headerSize + senderIdSize + payloadLength;
+      if (hasRecipient) expectedSize += 8; // recipientIdSize
+      if (hasSignature) expectedSize += 64; // signatureSize
+
+      // Handle route: 1 byte count + (count * 8) bytes for hop IDs
+      if (hasRoute) {
+        final routeOffset = headerSize + senderIdSize + (hasRecipient ? 8 : 0);
+        if (buffer.length <= routeOffset) {
+          debugPrint('$_tag Need more data to read route count');
+          return;
+        }
+        final routeCount = buffer[routeOffset] & 0xFF;
+        expectedSize += 1 + (routeCount * 8);
+      }
+
+      debugPrint('$_tag Expected packet size: $expectedSize, buffer has: ${buffer.length}');
+
+      if (buffer.length < expectedSize) {
+        debugPrint('$_tag Waiting for more data (${buffer.length}/$expectedSize bytes)');
+        return; // Need more data
+      }
+
+      // Extract complete packet
+      final packetData = Uint8List.fromList(buffer.sublist(0, expectedSize));
+
+      // Remove processed bytes from buffer
+      buffer.removeRange(0, expectedSize);
+
+      debugPrint('$_tag Extracted complete packet: $expectedSize bytes');
+      debugPrint('$_tag Remaining in buffer: ${buffer.length} bytes');
+
+      // Update characteristic value
+      _characteristicValue = packetData;
+
+      // Notify delegate
+      debugPrint('$_tag Calling delegate.onDataReceived with reassembled packet...');
+      delegate?.onDataReceived(packetData, centralAddress);
+      debugPrint('$_tag delegate.onDataReceived call completed');
+    }
+
+    // Clean up empty buffer
+    if (buffer.isEmpty) {
+      _reassemblyBuffer.remove(centralAddress);
+      _reassemblyTimestamp.remove(centralAddress);
+    }
+  }
+
+  /// Clears reassembly buffer for a specific central (call on disconnect)
+  void _clearReassemblyBuffer(String centralAddress) {
+    _reassemblyBuffer.remove(centralAddress);
+    _reassemblyTimestamp.remove(centralAddress);
   }
 
   /// Handles notification subscription state changes
@@ -563,6 +727,7 @@ class GattServerManager {
       debugPrint('$_tag Central $centralAddress subscribed to notifications');
     } else {
       _subscribedCentrals.remove(centralAddress);
+      _clearReassemblyBuffer(centralAddress); // Clean up on disconnect
       debugPrint(
           '$_tag Central $centralAddress unsubscribed from notifications');
     }
@@ -668,6 +833,8 @@ class GattServerManager {
     _connectedCentrals.clear();
     _meshCharacteristic = null;
     _characteristicValue = Uint8List(0);
+    _reassemblyBuffer.clear();
+    _reassemblyTimestamp.clear();
 
     debugPrint('$_tag Cleanup complete');
   }

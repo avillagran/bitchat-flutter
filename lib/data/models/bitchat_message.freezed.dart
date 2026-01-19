@@ -138,7 +138,7 @@ class __$$SendingImplCopyWithImpl<$Res>
 
 /// @nodoc
 @JsonSerializable()
-class _$SendingImpl implements Sending {
+class _$SendingImpl with DiagnosticableTreeMixin implements Sending {
   const _$SendingImpl({final String? $type}) : $type = $type ?? 'sending';
 
   factory _$SendingImpl.fromJson(Map<String, dynamic> json) =>
@@ -148,8 +148,14 @@ class _$SendingImpl implements Sending {
   final String $type;
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'DeliveryStatus.sending()';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty('type', 'DeliveryStatus.sending'));
   }
 
   @override
@@ -279,7 +285,7 @@ class __$$SentImplCopyWithImpl<$Res>
 
 /// @nodoc
 @JsonSerializable()
-class _$SentImpl implements Sent {
+class _$SentImpl with DiagnosticableTreeMixin implements Sent {
   const _$SentImpl({final String? $type}) : $type = $type ?? 'sent';
 
   factory _$SentImpl.fromJson(Map<String, dynamic> json) =>
@@ -289,8 +295,14 @@ class _$SentImpl implements Sent {
   final String $type;
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'DeliveryStatus.sent()';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty('type', 'DeliveryStatus.sent'));
   }
 
   @override
@@ -441,7 +453,7 @@ class __$$DeliveredImplCopyWithImpl<$Res>
 
 /// @nodoc
 @JsonSerializable()
-class _$DeliveredImpl implements Delivered {
+class _$DeliveredImpl with DiagnosticableTreeMixin implements Delivered {
   const _$DeliveredImpl(
       {required this.to, required this.at, final String? $type})
       : $type = $type ?? 'delivered';
@@ -458,8 +470,17 @@ class _$DeliveredImpl implements Delivered {
   final String $type;
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'DeliveryStatus.delivered(to: $to, at: $at)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'DeliveryStatus.delivered'))
+      ..add(DiagnosticsProperty('to', to))
+      ..add(DiagnosticsProperty('at', at));
   }
 
   @override
@@ -626,7 +647,7 @@ class __$$ReadImplCopyWithImpl<$Res>
 
 /// @nodoc
 @JsonSerializable()
-class _$ReadImpl implements Read {
+class _$ReadImpl with DiagnosticableTreeMixin implements Read {
   const _$ReadImpl({required this.by, required this.at, final String? $type})
       : $type = $type ?? 'read';
 
@@ -642,8 +663,17 @@ class _$ReadImpl implements Read {
   final String $type;
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'DeliveryStatus.read(by: $by, at: $at)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'DeliveryStatus.read'))
+      ..add(DiagnosticsProperty('by', by))
+      ..add(DiagnosticsProperty('at', at));
   }
 
   @override
@@ -805,7 +835,7 @@ class __$$FailedImplCopyWithImpl<$Res>
 
 /// @nodoc
 @JsonSerializable()
-class _$FailedImpl implements Failed {
+class _$FailedImpl with DiagnosticableTreeMixin implements Failed {
   const _$FailedImpl({required this.reason, final String? $type})
       : $type = $type ?? 'failed';
 
@@ -819,8 +849,16 @@ class _$FailedImpl implements Failed {
   final String $type;
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'DeliveryStatus.failed(reason: $reason)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'DeliveryStatus.failed'))
+      ..add(DiagnosticsProperty('reason', reason));
   }
 
   @override
@@ -984,7 +1022,9 @@ class __$$PartiallyDeliveredImplCopyWithImpl<$Res>
 
 /// @nodoc
 @JsonSerializable()
-class _$PartiallyDeliveredImpl implements PartiallyDelivered {
+class _$PartiallyDeliveredImpl
+    with DiagnosticableTreeMixin
+    implements PartiallyDelivered {
   const _$PartiallyDeliveredImpl(
       {required this.reached, required this.total, final String? $type})
       : $type = $type ?? 'partiallyDelivered';
@@ -1001,8 +1041,17 @@ class _$PartiallyDeliveredImpl implements PartiallyDelivered {
   final String $type;
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'DeliveryStatus.partiallyDelivered(reached: $reached, total: $total)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'DeliveryStatus.partiallyDelivered'))
+      ..add(DiagnosticsProperty('reached', reached))
+      ..add(DiagnosticsProperty('total', total));
   }
 
   @override
@@ -1444,7 +1493,9 @@ class __$$BitchatMessageImplCopyWithImpl<$Res>
 
 /// @nodoc
 @JsonSerializable()
-class _$BitchatMessageImpl implements _BitchatMessage {
+class _$BitchatMessageImpl
+    with DiagnosticableTreeMixin
+    implements _BitchatMessage {
   const _$BitchatMessageImpl(
       {this.id = '',
       required this.sender,
@@ -1519,8 +1570,32 @@ class _$BitchatMessageImpl implements _BitchatMessage {
   final int? rssi;
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'BitchatMessage(id: $id, sender: $sender, content: $content, type: $type, timestamp: $timestamp, isRelay: $isRelay, originalSender: $originalSender, isPrivate: $isPrivate, recipientNickname: $recipientNickname, senderPeerID: $senderPeerID, mentions: $mentions, channel: $channel, encryptedContent: $encryptedContent, isEncrypted: $isEncrypted, deliveryStatus: $deliveryStatus, powDifficulty: $powDifficulty, rssi: $rssi)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'BitchatMessage'))
+      ..add(DiagnosticsProperty('id', id))
+      ..add(DiagnosticsProperty('sender', sender))
+      ..add(DiagnosticsProperty('content', content))
+      ..add(DiagnosticsProperty('type', type))
+      ..add(DiagnosticsProperty('timestamp', timestamp))
+      ..add(DiagnosticsProperty('isRelay', isRelay))
+      ..add(DiagnosticsProperty('originalSender', originalSender))
+      ..add(DiagnosticsProperty('isPrivate', isPrivate))
+      ..add(DiagnosticsProperty('recipientNickname', recipientNickname))
+      ..add(DiagnosticsProperty('senderPeerID', senderPeerID))
+      ..add(DiagnosticsProperty('mentions', mentions))
+      ..add(DiagnosticsProperty('channel', channel))
+      ..add(DiagnosticsProperty('encryptedContent', encryptedContent))
+      ..add(DiagnosticsProperty('isEncrypted', isEncrypted))
+      ..add(DiagnosticsProperty('deliveryStatus', deliveryStatus))
+      ..add(DiagnosticsProperty('powDifficulty', powDifficulty))
+      ..add(DiagnosticsProperty('rssi', rssi));
   }
 
   @override

@@ -175,35 +175,54 @@ class BleManager {
   /// Returns true if initialization succeeded.
   /// Safe to call multiple times; subsequent calls are no-ops.
   Future<bool> initialize() async {
+    debugPrint('$_tag ****************************************');
+    debugPrint('$_tag * BLE MANAGER INITIALIZE() CALLED     *');
+    debugPrint('$_tag ****************************************');
+
     if (_initialized) {
-      debugPrint('$_tag Already initialized');
+      debugPrint('$_tag Already initialized, returning true');
       return true;
     }
 
-    debugPrint('$_tag Initializing BLE managers...');
+    debugPrint('$_tag Starting BLE initialization...');
+    debugPrint('$_tag Platform: ${_getPlatformName()}');
 
     try {
       // Detect platform capabilities
+      debugPrint('$_tag Step 1: Detecting platform capabilities...');
       _detectPlatformCapabilities();
 
       // Initialize Central Manager (available on all platforms)
       if (_supportsCentral) {
+        debugPrint('$_tag Step 2: Initializing Central Manager...');
         _initializeCentralManager();
+      } else {
+        debugPrint('$_tag Step 2: SKIPPED - Central not supported');
       }
 
       // Initialize Peripheral Manager (not available on Linux)
       if (_supportsPeripheral) {
+        debugPrint('$_tag Step 3: Initializing Peripheral Manager...');
         _initializePeripheralManager();
+      } else {
+        debugPrint('$_tag Step 3: SKIPPED - Peripheral not supported');
       }
 
       _initialized = true;
-      debugPrint('$_tag Initialization complete');
+      debugPrint('$_tag ****************************************');
+      debugPrint('$_tag * BLE INITIALIZATION COMPLETE         *');
+      debugPrint('$_tag ****************************************');
+      debugPrint('$_tag Summary:');
       debugPrint('$_tag   Central support: $_supportsCentral');
       debugPrint('$_tag   Peripheral support: $_supportsPeripheral');
+      debugPrint('$_tag   Last known state: $_lastState');
 
       return true;
     } catch (e, stackTrace) {
-      debugPrint('$_tag Initialization failed: $e');
+      debugPrint('$_tag ****************************************');
+      debugPrint('$_tag * BLE INITIALIZATION FAILED!          *');
+      debugPrint('$_tag ****************************************');
+      debugPrint('$_tag Error: $e');
       debugPrint('$_tag Stack trace: $stackTrace');
       _initialized = false;
       return false;
@@ -233,47 +252,61 @@ class BleManager {
 
   /// Initializes the CentralManager and subscribes to state changes.
   void _initializeCentralManager() {
-    debugPrint('$_tag Initializing CentralManager...');
+    debugPrint('$_tag ====== CENTRAL MANAGER INIT START ======');
+    debugPrint('$_tag Creating CentralManager() instance...');
 
     _centralManager = CentralManager();
+
+    debugPrint('$_tag CentralManager created, setting up state listener...');
 
     // Subscribe to state changes
     _centralStateSubscription = _centralManager!.stateChanged.listen(
       (eventArgs) {
-        debugPrint('$_tag Central state changed: ${eventArgs.state}');
+        debugPrint('$_tag *** Central state changed callback: ${eventArgs.state}');
+        debugPrint('$_tag State description: ${eventArgs.state.description}');
         _handleStateChange(eventArgs.state);
       },
-      onError: (e) {
+      onError: (e, stack) {
         debugPrint('$_tag Central state stream error: $e');
+        debugPrint('$_tag Stack: $stack');
       },
     );
 
     // Get initial state (synchronous getter)
+    debugPrint('$_tag Getting initial central state...');
     final initialState = _centralManager!.state;
-    debugPrint('$_tag Central initial state: $initialState');
+    debugPrint('$_tag Central initial state: $initialState (${initialState.description})');
     _handleStateChange(initialState);
+    debugPrint('$_tag ====== CENTRAL MANAGER INIT COMPLETE ======');
   }
 
   /// Initializes the PeripheralManager and subscribes to state changes.
   void _initializePeripheralManager() {
-    debugPrint('$_tag Initializing PeripheralManager...');
+    debugPrint('$_tag ====== PERIPHERAL MANAGER INIT START ======');
+    debugPrint('$_tag Creating PeripheralManager() instance...');
 
     _peripheralManager = PeripheralManager();
+
+    debugPrint('$_tag PeripheralManager created, setting up state listener...');
 
     // Subscribe to state changes
     _peripheralStateSubscription = _peripheralManager!.stateChanged.listen(
       (eventArgs) {
-        debugPrint('$_tag Peripheral state changed: ${eventArgs.state}');
+        debugPrint('$_tag *** Peripheral state changed callback: ${eventArgs.state}');
+        debugPrint('$_tag State description: ${eventArgs.state.description}');
         _handleStateChange(eventArgs.state);
       },
-      onError: (e) {
+      onError: (e, stack) {
         debugPrint('$_tag Peripheral state stream error: $e');
+        debugPrint('$_tag Stack: $stack');
       },
     );
 
     // Get initial state (synchronous getter)
+    debugPrint('$_tag Getting initial peripheral state...');
     final initialState = _peripheralManager!.state;
-    debugPrint('$_tag Peripheral initial state: $initialState');
+    debugPrint('$_tag Peripheral initial state: $initialState (${initialState.description})');
+    debugPrint('$_tag ====== PERIPHERAL MANAGER INIT COMPLETE ======');
   }
 
   /// Handles state changes from either Central or Peripheral manager.

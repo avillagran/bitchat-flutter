@@ -59,18 +59,37 @@ class MyPeripheralManager: MyPeripheralManagerHostAPI {
     }
 
     // LAZY INIT: Get or create CBPeripheralManager on demand
+    // IMPORTANT: Must pass delegate at creation time to receive initial peripheralManagerDidUpdateState
     private func getPeripheralManager() -> CBPeripheralManager {
         if mPeripheralManager == nil {
-            mPeripheralManager = CBPeripheralManager()
+            NSLog("[BLE-Bitchat-Peripheral] Creating CBPeripheralManager with delegate...")
+            mPeripheralManager = CBPeripheralManager(delegate: mPeripheralManagerDelegate, queue: nil)
+            NSLog("[BLE-Bitchat-Peripheral] CBPeripheralManager created, state: \(mPeripheralManager!.state.rawValue) (\(stateDescription(mPeripheralManager!.state)))")
         }
         return mPeripheralManager!
     }
 
+    private func stateDescription(_ state: CBManagerState) -> String {
+        switch state {
+        case .unknown: return "unknown"
+        case .resetting: return "resetting"
+        case .unsupported: return "unsupported"
+        case .unauthorized: return "unauthorized"
+        case .poweredOff: return "poweredOff"
+        case .poweredOn: return "poweredOn"
+        @unknown default: return "unknown(\(state.rawValue))"
+        }
+    }
+
     func initialize() throws {
+        NSLog("[BLE-Bitchat-Peripheral] ====== PERIPHERAL INITIALIZE START ======")
+
         // LAZY INIT: CBPeripheralManager is created here when Dart calls initialize()
         let peripheralManager = getPeripheralManager()
+        NSLog("[BLE-Bitchat-Peripheral] After getPeripheralManager, state: \(peripheralManager.state.rawValue) (\(stateDescription(peripheralManager.state)))")
 
         if(peripheralManager.isAdvertising) {
+            NSLog("[BLE-Bitchat-Peripheral] Stopping existing advertising")
             peripheralManager.stopAdvertising()
         }
 
@@ -88,10 +107,13 @@ class MyPeripheralManager: MyPeripheralManagerHostAPI {
         mStartAdvertisingCompletion = nil
 
         peripheralManager.delegate = mPeripheralManagerDelegate
+        NSLog("[BLE-Bitchat-Peripheral] Delegate reassigned")
+        NSLog("[BLE-Bitchat-Peripheral] ====== PERIPHERAL INITIALIZE COMPLETE ======")
     }
 
     func getState() throws -> MyBluetoothLowEnergyStateArgs {
         let state = getPeripheralManager().state
+        NSLog("[BLE-Bitchat-Peripheral] getState() called, returning: \(state.rawValue) (\(stateDescription(state)))")
         let stateArgs = state.toArgs()
         return stateArgs
     }
@@ -118,11 +140,16 @@ class MyPeripheralManager: MyPeripheralManagerHostAPI {
     }
 
     func addService(serviceArgs: MyMutableGATTServiceArgs, completion: @escaping (Result<Void, Error>) -> Void) {
+        NSLog("[BLE-Bitchat-Peripheral] ====== ADD SERVICE ======")
+        NSLog("[BLE-Bitchat-Peripheral] Adding service UUID: \(serviceArgs.uuidArgs)")
         do {
             let service = try addServiceArgs(serviceArgs)
+            NSLog("[BLE-Bitchat-Peripheral] Service created, adding to peripheral manager...")
             getPeripheralManager().add(service)
             mAddServiceCompletion = completion
+            NSLog("[BLE-Bitchat-Peripheral] add(service) called, waiting for callback")
         } catch {
+            NSLog("[BLE-Bitchat-Peripheral] ERROR: Failed to add service - \(error)")
             completion(.failure(error))
         }
     }
@@ -151,12 +178,21 @@ class MyPeripheralManager: MyPeripheralManagerHostAPI {
     }
 
     func startAdvertising(advertisementArgs: MyAdvertisementArgs, completion: @escaping (Result<Void, Error>) -> Void) {
+        NSLog("[BLE-Bitchat-Peripheral] ====== START ADVERTISING ======")
+        let currentState = getPeripheralManager().state
+        NSLog("[BLE-Bitchat-Peripheral] Current state: \(currentState.rawValue) (\(stateDescription(currentState)))")
+        if currentState != .poweredOn {
+            NSLog("[BLE-Bitchat-Peripheral] WARNING: Attempting to advertise while not poweredOn!")
+        }
         let advertisement = advertisementArgs.toAdvertisement()
+        NSLog("[BLE-Bitchat-Peripheral] Advertisement data: \(advertisement)")
         getPeripheralManager().startAdvertising(advertisement)
         mStartAdvertisingCompletion = completion
+        NSLog("[BLE-Bitchat-Peripheral] startAdvertising() called, waiting for callback")
     }
 
     func stopAdvertising() throws {
+        NSLog("[BLE-Bitchat-Peripheral] stopAdvertising() called")
         getPeripheralManager().stopAdvertising()
     }
 
@@ -197,16 +233,33 @@ class MyPeripheralManager: MyPeripheralManagerHostAPI {
 
     func didUpdateState(peripheral: CBPeripheralManager) {
         let state = peripheral.state
+        NSLog("[BLE-Bitchat-Peripheral] ====== STATE UPDATE ======")
+        NSLog("[BLE-Bitchat-Peripheral] didUpdateState: \(state.rawValue) (\(stateDescription(state)))")
         let stateArgs = state.toArgs()
-        mAPI.onStateChanged(stateArgs: stateArgs) { _ in }
+        NSLog("[BLE-Bitchat-Peripheral] Notifying Dart of peripheral state change...")
+        mAPI.onStateChanged(stateArgs: stateArgs) { result in
+            switch result {
+            case .success:
+                NSLog("[BLE-Bitchat-Peripheral] State change notification sent to Dart")
+            case .failure(let error):
+                NSLog("[BLE-Bitchat-Peripheral] ERROR: Failed to notify Dart - \(error)")
+            }
+        }
     }
 
     func didAdd(peripheral: CBPeripheralManager, service: CBService, error: Error?) {
+        NSLog("[BLE-Bitchat-Peripheral] ====== SERVICE ADDED CALLBACK ======")
+        NSLog("[BLE-Bitchat-Peripheral] Service: \(service.uuid.uuidString)")
+        if let error = error {
+            NSLog("[BLE-Bitchat-Peripheral] ERROR: \(error.localizedDescription)")
+        }
         guard let completion = mAddServiceCompletion else {
+            NSLog("[BLE-Bitchat-Peripheral] No completion handler for addService")
             return
         }
         mAddServiceCompletion = nil
         if error == nil {
+            NSLog("[BLE-Bitchat-Peripheral] Service added successfully")
             completion(.success(()))
         } else {
             completion(.failure(error!))
@@ -214,7 +267,14 @@ class MyPeripheralManager: MyPeripheralManagerHostAPI {
     }
 
     func didStartAdvertising(peripheral: CBPeripheralManager, error: Error?) {
+        NSLog("[BLE-Bitchat-Peripheral] ====== ADVERTISING STARTED CALLBACK ======")
+        if let error = error {
+            NSLog("[BLE-Bitchat-Peripheral] ERROR: \(error.localizedDescription)")
+        } else {
+            NSLog("[BLE-Bitchat-Peripheral] Advertising started successfully")
+        }
         guard let completion = mStartAdvertisingCompletion else {
+            NSLog("[BLE-Bitchat-Peripheral] No completion handler for startAdvertising")
             return
         }
         mStartAdvertisingCompletion = nil

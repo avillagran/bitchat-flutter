@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:math';
+import 'dart:io';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart' as crypto;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 /// Secure storage service for managing sensitive data in the Bitchat app.
 ///
@@ -33,6 +36,87 @@ class SecureStorageService {
       accessibility: KeychainAccessibility.first_unlock,
     ),
   );
+
+  /// Fallback storage for macOS when keychain fails
+  SharedPreferences? _fallbackPrefs;
+  bool _useFallback = false;
+  static const String _fallbackPrefix = 'secure_fallback_';
+
+  /// Initialize fallback storage for macOS
+  bool _initializingFallback = false;
+  Future<void> _initFallbackIfNeeded() async {
+    if (!Platform.isMacOS || _fallbackPrefs != null || _initializingFallback) return;
+    _initializingFallback = true;
+    try {
+      // Test if secure storage works by calling _storage directly
+      await _storage.write(key: '_test', value: 'test');
+      await _storage.delete(key: '_test');
+    } catch (e) {
+      debugPrint('[SecureStorage] Keychain failed, using SharedPreferences fallback: $e');
+      _useFallback = true;
+      _fallbackPrefs = await SharedPreferences.getInstance();
+    } finally {
+      _initializingFallback = false;
+    }
+  }
+
+  Future<void> _write(String key, String value) async {
+    await _initFallbackIfNeeded();
+    if (_useFallback && _fallbackPrefs != null) {
+      await _fallbackPrefs!.setString('$_fallbackPrefix$key', value);
+    } else {
+      await _storage.write(key: key, value: value);
+    }
+  }
+
+  Future<String?> _read(String key) async {
+    await _initFallbackIfNeeded();
+    if (_useFallback && _fallbackPrefs != null) {
+      return _fallbackPrefs!.getString('$_fallbackPrefix$key');
+    } else {
+      return await _storage.read(key: key);
+    }
+  }
+
+  Future<void> _delete(String key) async {
+    await _initFallbackIfNeeded();
+    if (_useFallback && _fallbackPrefs != null) {
+      await _fallbackPrefs!.remove('$_fallbackPrefix$key');
+    } else {
+      await _storage.delete(key: key);
+    }
+  }
+
+  Future<bool> _containsKey(String key) async {
+    await _initFallbackIfNeeded();
+    if (_useFallback && _fallbackPrefs != null) {
+      return _fallbackPrefs!.containsKey('$_fallbackPrefix$key');
+    } else {
+      return await _storage.containsKey(key: key);
+    }
+  }
+
+  Future<Map<String, String>> _readAll() async {
+    await _initFallbackIfNeeded();
+    if (_useFallback && _fallbackPrefs != null) {
+      final keys = _fallbackPrefs!.getKeys().where((k) => k.startsWith(_fallbackPrefix));
+      return {for (var k in keys) k.substring(_fallbackPrefix.length): _fallbackPrefs!.getString(k) ?? ''};
+    } else {
+      return await _storage.readAll();
+    }
+  }
+
+  Future<void> _deleteAll() async {
+    await _initFallbackIfNeeded();
+    if (_useFallback && _fallbackPrefs != null) {
+      final keys = _fallbackPrefs!.getKeys().where((k) => k.startsWith(_fallbackPrefix)).toList();
+      for (final k in keys) {
+        await _fallbackPrefs!.remove(k);
+      }
+    } else {
+      await _storage.deleteAll();
+    }
+  }
 
   // MARK: - Storage Keys
 
@@ -65,8 +149,8 @@ class SecureStorageService {
   /// Keys are Base64 encoded when stored.
   Future<KeyPair?> loadStaticKeyPair() async {
     try {
-      final privateKeyString = await _storage.read(key: _keyStaticPrivateKey);
-      final publicKeyString = await _storage.read(key: _keyStaticPublicKey);
+      final privateKeyString = await _read( _keyStaticPrivateKey);
+      final publicKeyString = await _read( _keyStaticPublicKey);
 
       if (privateKeyString == null || publicKeyString == null) {
         return null;
@@ -106,8 +190,8 @@ class SecureStorageService {
       final privateKeyString = base64Encode(privateKey);
       final publicKeyString = base64Encode(publicKey);
 
-      await _storage.write(key: _keyStaticPrivateKey, value: privateKeyString);
-      await _storage.write(key: _keyStaticPublicKey, value: publicKeyString);
+      await _write( _keyStaticPrivateKey, privateKeyString);
+      await _write( _keyStaticPublicKey, publicKeyString);
     } catch (e) {
       throw SecureStorageException('Failed to save static key pair: $e');
     }
@@ -120,8 +204,8 @@ class SecureStorageService {
   /// Returns null if no keys exist.
   Future<KeyPair?> loadSigningKeyPair() async {
     try {
-      final privateKeyString = await _storage.read(key: _keySigningPrivateKey);
-      final publicKeyString = await _storage.read(key: _keySigningPublicKey);
+      final privateKeyString = await _read( _keySigningPrivateKey);
+      final publicKeyString = await _read( _keySigningPublicKey);
 
       if (privateKeyString == null || publicKeyString == null) {
         return null;
@@ -160,8 +244,8 @@ class SecureStorageService {
       final privateKeyString = base64Encode(privateKey);
       final publicKeyString = base64Encode(publicKey);
 
-      await _storage.write(key: _keySigningPrivateKey, value: privateKeyString);
-      await _storage.write(key: _keySigningPublicKey, value: publicKeyString);
+      await _write( _keySigningPrivateKey, privateKeyString);
+      await _write( _keySigningPublicKey, publicKeyString);
     } catch (e) {
       throw SecureStorageException('Failed to save signing key pair: $e');
     }
@@ -191,7 +275,7 @@ class SecureStorageService {
   /// Returns a set of fingerprint strings that have been manually verified.
   Future<Set<String>> getVerifiedFingerprints() async {
     try {
-      final data = await _storage.read(key: _keyVerifiedFingerprints);
+      final data = await _read( _keyVerifiedFingerprints);
       if (data == null) return <String>{};
 
       final json = jsonDecode(data) as List<dynamic>;
@@ -226,7 +310,7 @@ class SecureStorageService {
       }
 
       final data = jsonEncode(current.toList());
-      await _storage.write(key: _keyVerifiedFingerprints, value: data);
+      await _write( _keyVerifiedFingerprints, data);
     } catch (e) {
       throw SecureStorageException('Failed to update verified fingerprint: $e');
     }
@@ -239,7 +323,7 @@ class SecureStorageService {
   /// Returns the fingerprint string or null if not cached.
   Future<String?> getCachedPeerFingerprint(String peerID) async {
     try {
-      final entries = await _storage.read(key: _keyCachedPeerFingerprints);
+      final entries = await _read( _keyCachedPeerFingerprints);
       if (entries == null) return null;
 
       final normalizedPeerID = peerID.toLowerCase();
@@ -272,7 +356,7 @@ class SecureStorageService {
     }
 
     try {
-      final entriesStr = await _storage.read(key: _keyCachedPeerFingerprints);
+      final entriesStr = await _read( _keyCachedPeerFingerprints);
       final entryList = <String>[];
 
       if (entriesStr != null) {
@@ -290,7 +374,7 @@ class SecureStorageService {
       entryList.add('$normalizedPeerID:$normalizedFingerprint');
 
       final data = jsonEncode(entryList);
-      await _storage.write(key: _keyCachedPeerFingerprints, value: data);
+      await _write( _keyCachedPeerFingerprints, data);
     } catch (e) {
       throw SecureStorageException('Failed to cache peer fingerprint: $e');
     }
@@ -301,7 +385,7 @@ class SecureStorageService {
   /// Returns the Noise public key as a hex string or null if not cached.
   Future<String?> getCachedPeerNoiseKey(String peerID) async {
     try {
-      final entries = await _storage.read(key: _keyCachedPeerNoiseKeys);
+      final entries = await _read( _keyCachedPeerNoiseKeys);
       if (entries == null) return null;
 
       final normalizedPeerID = peerID.toLowerCase();
@@ -333,7 +417,7 @@ class SecureStorageService {
     }
 
     try {
-      final entriesStr = await _storage.read(key: _keyCachedPeerNoiseKeys);
+      final entriesStr = await _read( _keyCachedPeerNoiseKeys);
       final entryList = <String>[];
 
       if (entriesStr != null) {
@@ -351,7 +435,7 @@ class SecureStorageService {
       entryList.add('$normalizedPeerID=$normalizedNoiseKey');
 
       final data = jsonEncode(entryList);
-      await _storage.write(key: _keyCachedPeerNoiseKeys, value: data);
+      await _write( _keyCachedPeerNoiseKeys, data);
     } catch (e) {
       throw SecureStorageException('Failed to cache peer noise key: $e');
     }
@@ -360,7 +444,7 @@ class SecureStorageService {
   /// Get cached fingerprint for a specific Noise key.
   Future<String?> getCachedNoiseFingerprint(String noiseKeyHex) async {
     try {
-      final entries = await _storage.read(key: _keyCachedNoiseFingerprints);
+      final entries = await _read( _keyCachedNoiseFingerprints);
       if (entries == null) return null;
 
       final key = noiseKeyHex.toLowerCase();
@@ -396,7 +480,7 @@ class SecureStorageService {
     }
 
     try {
-      final entriesStr = await _storage.read(key: _keyCachedNoiseFingerprints);
+      final entriesStr = await _read( _keyCachedNoiseFingerprints);
       final entryList = <String>[];
 
       if (entriesStr != null) {
@@ -414,7 +498,7 @@ class SecureStorageService {
       entryList.add('$key=$normalizedFingerprint');
 
       final data = jsonEncode(entryList);
-      await _storage.write(key: _keyCachedNoiseFingerprints, value: data);
+      await _write( _keyCachedNoiseFingerprints, data);
     } catch (e) {
       throw SecureStorageException('Failed to cache noise fingerprint: $e');
     }
@@ -425,7 +509,7 @@ class SecureStorageService {
     if (!isValidFingerprint(fingerprint)) return null;
 
     try {
-      final entries = await _storage.read(key: _keyCachedFingerprintNicknames);
+      final entries = await _read( _keyCachedFingerprintNicknames);
       if (entries == null) return null;
 
       final key = fingerprint.toLowerCase();
@@ -458,7 +542,7 @@ class SecureStorageService {
     }
 
     try {
-      final entriesStr = await _storage.read(key: _keyCachedFingerprintNicknames);
+      final entriesStr = await _read( _keyCachedFingerprintNicknames);
       final entryList = <String>[];
 
       if (entriesStr != null) {
@@ -476,7 +560,7 @@ class SecureStorageService {
       entryList.add('$key=$encoded');
 
       final data = jsonEncode(entryList);
-      await _storage.write(key: _keyCachedFingerprintNicknames, value: data);
+      await _write( _keyCachedFingerprintNicknames, data);
     } catch (e) {
       throw SecureStorageException('Failed to cache fingerprint nickname: $e');
     }
@@ -492,7 +576,7 @@ class SecureStorageService {
     try {
       final key = '$_keySessionPrefix${peerID.toLowerCase()}';
       final data = jsonEncode(metadata);
-      await _storage.write(key: key, value: data);
+      await _write( key, data);
     } catch (e) {
       throw SecureStorageException('Failed to save session metadata: $e');
     }
@@ -504,7 +588,7 @@ class SecureStorageService {
   Future<Map<String, dynamic>?> loadSessionMetadata(String peerID) async {
     try {
       final key = '$_keySessionPrefix${peerID.toLowerCase()}';
-      final data = await _storage.read(key: key);
+      final data = await _read( key);
       if (data == null) return null;
 
       return jsonDecode(data) as Map<String, dynamic>;
@@ -517,7 +601,7 @@ class SecureStorageService {
   Future<void> deleteSessionMetadata(String peerID) async {
     try {
       final key = '$_keySessionPrefix${peerID.toLowerCase()}';
-      await _storage.delete(key: key);
+      await _delete( key);
     } catch (e) {
       throw SecureStorageException('Failed to delete session metadata: $e');
     }
@@ -526,7 +610,7 @@ class SecureStorageService {
   /// Get all peer IDs with stored session metadata.
   Future<Set<String>> getAllSessionPeerIDs() async {
     try {
-      final allKeys = await _storage.readAll();
+      final allKeys = await _readAll();
       final sessionKeys = allKeys.keys
           .where((key) => key.startsWith(_keySessionPrefix))
           .map((key) => key.substring(_keySessionPrefix.length));
@@ -544,7 +628,7 @@ class SecureStorageService {
   Future<void> saveSettings(Map<String, dynamic> settings) async {
     try {
       final data = jsonEncode(settings);
-      await _storage.write(key: _keySettings, value: data);
+      await _write( _keySettings, data);
     } catch (e) {
       throw SecureStorageException('Failed to save settings: $e');
     }
@@ -555,7 +639,7 @@ class SecureStorageService {
   /// Returns the settings map or an empty map if no settings are stored.
   Future<Map<String, dynamic>> loadSettings() async {
     try {
-      final data = await _storage.read(key: _keySettings);
+      final data = await _read( _keySettings);
       if (data == null) return <String, dynamic>{};
 
       return jsonDecode(data) as Map<String, dynamic>;
@@ -659,7 +743,7 @@ class SecureStorageService {
   /// Store a generic secure value.
   Future<void> storeSecureValue(String key, String value) async {
     try {
-      await _storage.write(key: key, value: value);
+      await _write( key, value);
     } catch (e) {
       throw SecureStorageException('Failed to store secure value: $e');
     }
@@ -668,7 +752,7 @@ class SecureStorageService {
   /// Retrieve a generic secure value.
   Future<String?> getSecureValue(String key) async {
     try {
-      return await _storage.read(key: key);
+      return await _read( key);
     } catch (e) {
       throw SecureStorageException('Failed to get secure value: $e');
     }
@@ -677,7 +761,7 @@ class SecureStorageService {
   /// Remove a secure value.
   Future<void> removeSecureValue(String key) async {
     try {
-      await _storage.delete(key: key);
+      await _delete( key);
     } catch (e) {
       throw SecureStorageException('Failed to remove secure value: $e');
     }
@@ -686,7 +770,7 @@ class SecureStorageService {
   /// Check if a secure value exists.
   Future<bool> hasSecureValue(String key) async {
     try {
-      return await _storage.containsKey(key: key);
+      return await _containsKey( key);
     } catch (e) {
       throw SecureStorageException('Failed to check secure value: $e');
     }
@@ -697,8 +781,8 @@ class SecureStorageService {
   /// Check if identity data exists.
   Future<bool> hasIdentityData() async {
     try {
-      final hasStaticKey = await _storage.containsKey(key: _keyStaticPrivateKey);
-      final hasSigningKey = await _storage.containsKey(key: _keySigningPrivateKey);
+      final hasStaticKey = await _containsKey( _keyStaticPrivateKey);
+      final hasSigningKey = await _containsKey( _keySigningPrivateKey);
       return hasStaticKey && hasSigningKey;
     } catch (e) {
       throw SecureStorageException('Failed to check identity data: $e');
@@ -708,11 +792,11 @@ class SecureStorageService {
   /// Clear all identity data (for panic mode).
   Future<void> clearIdentityData() async {
     try {
-      await _storage.delete(key: _keyStaticPrivateKey);
-      await _storage.delete(key: _keyStaticPublicKey);
-      await _storage.delete(key: _keySigningPrivateKey);
-      await _storage.delete(key: _keySigningPublicKey);
-      await _storage.delete(key: _keyVerifiedFingerprints);
+      await _delete( _keyStaticPrivateKey);
+      await _delete( _keyStaticPublicKey);
+      await _delete( _keySigningPrivateKey);
+      await _delete( _keySigningPublicKey);
+      await _delete( _keyVerifiedFingerprints);
     } catch (e) {
       throw SecureStorageException('Failed to clear identity data: $e');
     }
@@ -721,10 +805,10 @@ class SecureStorageService {
   /// Clear all cached peer data.
   Future<void> clearCachedPeerData() async {
     try {
-      await _storage.delete(key: _keyCachedPeerFingerprints);
-      await _storage.delete(key: _keyCachedPeerNoiseKeys);
-      await _storage.delete(key: _keyCachedNoiseFingerprints);
-      await _storage.delete(key: _keyCachedFingerprintNicknames);
+      await _delete( _keyCachedPeerFingerprints);
+      await _delete( _keyCachedPeerNoiseKeys);
+      await _delete( _keyCachedNoiseFingerprints);
+      await _delete( _keyCachedFingerprintNicknames);
     } catch (e) {
       throw SecureStorageException('Failed to clear cached peer data: $e');
     }
@@ -733,11 +817,11 @@ class SecureStorageService {
   /// Clear all session metadata.
   Future<void> clearAllSessions() async {
     try {
-      final allKeys = await _storage.readAll();
+      final allKeys = await _readAll();
       final sessionKeys = allKeys.keys
           .where((key) => key.startsWith(_keySessionPrefix));
       for (final key in sessionKeys) {
-        await _storage.delete(key: key);
+        await _delete( key);
       }
     } catch (e) {
       throw SecureStorageException('Failed to clear all sessions: $e');
@@ -747,7 +831,7 @@ class SecureStorageService {
   /// Clear all stored data.
   Future<void> clearAll() async {
     try {
-      await _storage.deleteAll();
+      await _deleteAll();
     } catch (e) {
       throw SecureStorageException('Failed to clear all data: $e');
     }

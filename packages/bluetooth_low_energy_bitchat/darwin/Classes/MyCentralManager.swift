@@ -45,6 +45,10 @@ class MyCentralManager: MyCentralManagerHostAPI {
     private var mReadDescriptorCompletions: [String: [Int64: (Result<FlutterStandardTypedData, Error>) -> Void]]
     private var mWriteDescriptorCompletions: [String: [Int64: (Result<Void, Error>) -> Void]]
 
+    // Track last logged discovery time for each UUID to reduce log spam
+    private var mLastDiscoveryLogTime: [String: Date] = [:]
+    private let discoveryLogThrottleSeconds: TimeInterval = 30
+
     init(messenger: FlutterBinaryMessenger) {
         mAPI = MyCentralManagerFlutterAPI(binaryMessenger: messenger)
         // LAZY INIT: DO NOT create CBCentralManager here - it triggers TCC immediately
@@ -69,22 +73,37 @@ class MyCentralManager: MyCentralManagerHostAPI {
         mWriteDescriptorCompletions = [:]
     }
 
+    private var pollTimer: Timer?
+
     // LAZY INIT: Get or create CBCentralManager on demand
+    // IMPORTANT: Must pass delegate at creation time to receive initial centralManagerDidUpdateState
     private func getCentralManager() -> CBCentralManager {
         if mCentralManager == nil {
-            mCentralManager = CBCentralManager()
+            NSLog("[BLE-Bitchat] Creating CBCentralManager with delegate... isMainThread=\(Thread.isMainThread)")
+            print("[BLE-Bitchat] Creating CBCentralManager with delegate... isMainThread=\(Thread.isMainThread)")
+            mCentralManager = CBCentralManager(delegate: mCentralManagerDelegate, queue: DispatchQueue.main)
+            NSLog("[BLE-Bitchat] CBCentralManager created, state: \(mCentralManager!.state.rawValue)")
+
+            // DEBUG: Background poll disabled - was causing SIGABRT
         }
         return mCentralManager!
     }
 
     func initialize() throws {
+        NSLog("[BLE-Bitchat] ====== CENTRAL INITIALIZE START ======")
+        NSLog("[BLE-Bitchat] initialize() called from Dart")
+
         // LAZY INIT: CBCentralManager is created here when Dart calls initialize()
         let centralManager = getCentralManager()
+        NSLog("[BLE-Bitchat] After getCentralManager, state: \(centralManager.state.rawValue) (\(stateDescription(centralManager.state)))")
 
         if(centralManager.isScanning) {
+            NSLog("[BLE-Bitchat] Stopping existing scan")
             centralManager.stopScan()
         }
 
+        let connectedCount = mPeripherals.values.filter { $0.state != .disconnected }.count
+        NSLog("[BLE-Bitchat] Disconnecting \(connectedCount) connected peripherals")
         for peripheral in mPeripherals.values {
             if peripheral.state != .disconnected {
                 centralManager.cancelPeripheralConnection(peripheral)
@@ -109,11 +128,29 @@ class MyCentralManager: MyCentralManagerHostAPI {
         mReadDescriptorCompletions.removeAll()
         mWriteDescriptorCompletions.removeAll()
 
+        // Clear discovery log tracking on reset
+        mLastDiscoveryLogTime.removeAll()
+
         centralManager.delegate = mCentralManagerDelegate
+        NSLog("[BLE-Bitchat] Delegate reassigned, current state: \(centralManager.state.rawValue) (\(stateDescription(centralManager.state)))")
+        NSLog("[BLE-Bitchat] ====== CENTRAL INITIALIZE COMPLETE ======")
+    }
+
+    private func stateDescription(_ state: CBManagerState) -> String {
+        switch state {
+        case .unknown: return "unknown"
+        case .resetting: return "resetting"
+        case .unsupported: return "unsupported"
+        case .unauthorized: return "unauthorized"
+        case .poweredOff: return "poweredOff"
+        case .poweredOn: return "poweredOn"
+        @unknown default: return "unknown(\(state.rawValue))"
+        }
     }
 
     func getState() throws -> MyBluetoothLowEnergyStateArgs {
         let state = getCentralManager().state
+        NSLog("[BLE-Bitchat] getState() called, returning: \(state.rawValue) (\(stateDescription(state)))")
         let stateArgs = state.toArgs()
         return stateArgs
     }
@@ -140,13 +177,28 @@ class MyCentralManager: MyCentralManagerHostAPI {
     }
 
     func startDiscovery(serviceUUIDsArgs: [String]) throws {
+        NSLog("[BLE-Bitchat] ====== START DISCOVERY ======")
+        let currentState = getCentralManager().state
+        NSLog("[BLE-Bitchat] Current state before scan: \(currentState.rawValue) (\(stateDescription(currentState)))")
+
+        if currentState != .poweredOn {
+            NSLog("[BLE-Bitchat] WARNING: Attempting to scan while not poweredOn!")
+        }
+
         let serviceUUIDs = serviceUUIDsArgs.isEmpty ? nil : serviceUUIDsArgs.map { serviceUUIDArgs in serviceUUIDArgs.toCBUUID() }
+        NSLog("[BLE-Bitchat] Service UUIDs filter: \(serviceUUIDs?.map { $0.uuidString } ?? ["none (scanning all)"])")
+
         let options = [CBCentralManagerScanOptionAllowDuplicatesKey: true]
+        NSLog("[BLE-Bitchat] Calling scanForPeripherals...")
         getCentralManager().scanForPeripherals(withServices: serviceUUIDs, options: options)
+
+        NSLog("[BLE-Bitchat] scanForPeripherals called, isScanning: \(getCentralManager().isScanning)")
     }
 
     func stopDiscovery() throws {
+        NSLog("[BLE-Bitchat] stopDiscovery() called, isScanning was: \(getCentralManager().isScanning)")
         getCentralManager().stopScan()
+        NSLog("[BLE-Bitchat] stopScan completed")
     }
 
     func retrieveConnectedPeripherals() throws -> [MyPeripheralArgs] {
@@ -164,21 +216,31 @@ class MyCentralManager: MyCentralManagerHostAPI {
     }
 
     func connect(uuidArgs: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        NSLog("[BLE-Bitchat] ====== CONNECT START ======")
+        NSLog("[BLE-Bitchat] Connecting to peripheral: \(uuidArgs)")
         do {
             let peripheral = try retrievePeripheral(uuidArgs: uuidArgs)
+            NSLog("[BLE-Bitchat] Peripheral found, name: \(peripheral.name ?? "unknown"), state: \(peripheral.state.rawValue)")
             getCentralManager().connect(peripheral)
             mConnectCompletions[uuidArgs] = completion
+            NSLog("[BLE-Bitchat] connect() called, waiting for delegate callback")
         } catch {
+            NSLog("[BLE-Bitchat] ERROR: Failed to connect - \(error)")
             completion(.failure(error))
         }
     }
 
     func disconnect(uuidArgs: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        NSLog("[BLE-Bitchat] ====== DISCONNECT START ======")
+        NSLog("[BLE-Bitchat] Disconnecting from peripheral: \(uuidArgs)")
         do {
             let peripheral = try retrievePeripheral(uuidArgs: uuidArgs)
+            NSLog("[BLE-Bitchat] Peripheral found, current state: \(peripheral.state.rawValue)")
             getCentralManager().cancelPeripheralConnection(peripheral)
             mDisconnectCompletions[uuidArgs] = completion
+            NSLog("[BLE-Bitchat] cancelPeripheralConnection() called")
         } catch {
+            NSLog("[BLE-Bitchat] ERROR: Failed to disconnect - \(error)")
             completion(.failure(error))
         }
     }
@@ -202,12 +264,29 @@ class MyCentralManager: MyCentralManagerHostAPI {
     }
 
     func discoverServices(uuidArgs: String, completion: @escaping (Result<[MyGATTServiceArgs], Error>) -> Void) {
+        NSLog("[BLE-Bitchat] ====== DISCOVER SERVICES START ======")
+        NSLog("[BLE-Bitchat] discoverServices called for: \(uuidArgs)")
         do {
             let peripheral = try retrievePeripheral(uuidArgs: uuidArgs)
+            NSLog("[BLE-Bitchat] Peripheral found: \(peripheral.name ?? "unknown"), state: \(peripheral.state.rawValue)")
+            NSLog("[BLE-Bitchat] Peripheral state description: \(peripheralStateDescription(peripheral.state))")
+            NSLog("[BLE-Bitchat] Calling peripheral.discoverServices(nil)...")
             peripheral.discoverServices(nil)
             mDiscoverServicesCompletions[uuidArgs] = completion
+            NSLog("[BLE-Bitchat] discoverServices() called, waiting for didDiscoverServices callback...")
         } catch {
+            NSLog("[BLE-Bitchat] ERROR: discoverServices failed - \(error)")
             completion(.failure(error))
+        }
+    }
+
+    private func peripheralStateDescription(_ state: CBPeripheralState) -> String {
+        switch state {
+        case .disconnected: return "disconnected"
+        case .connecting: return "connecting"
+        case .connected: return "connected"
+        case .disconnecting: return "disconnecting"
+        @unknown default: return "unknown(\(state.rawValue))"
         }
     }
 
@@ -309,8 +388,18 @@ class MyCentralManager: MyCentralManagerHostAPI {
 
     func didUpdateState(central: CBCentralManager) {
         let state = central.state
+        NSLog("[BLE-Bitchat] ====== STATE UPDATE ======")
+        NSLog("[BLE-Bitchat] didUpdateState received: \(state.rawValue) (\(stateDescription(state)))")
         let stateArgs = state.toArgs()
-        mAPI.onStateChanged(stateArgs: stateArgs) { _ in }
+        NSLog("[BLE-Bitchat] Notifying Dart of state change...")
+        mAPI.onStateChanged(stateArgs: stateArgs) { result in
+            switch result {
+            case .success:
+                NSLog("[BLE-Bitchat] State change notification sent to Dart successfully")
+            case .failure(let error):
+                NSLog("[BLE-Bitchat] ERROR: Failed to notify Dart of state change: \(error)")
+            }
+        }
     }
 
     func didDiscover(central: CBCentralManager, peripheral: CBPeripheral, advertisementData: [String : Any], rssi: NSNumber) {
@@ -318,35 +407,70 @@ class MyCentralManager: MyCentralManagerHostAPI {
         let uuidArgs = peripheralArgs.uuidArgs
         let rssiArgs = rssi.int64Value
         let advertisementArgs = advertisementData.toAdvertisementArgs()
+
+        // Only log if this is first discovery or hasn't been logged in the last 30 seconds
+        let now = Date()
+        let shouldLog: Bool
+        if let lastLogTime = mLastDiscoveryLogTime[uuidArgs] {
+            shouldLog = now.timeIntervalSince(lastLogTime) >= discoveryLogThrottleSeconds
+        } else {
+            shouldLog = true // First discovery
+        }
+
+        if shouldLog {
+            NSLog("[BLE-Bitchat] DISCOVERED: \(peripheral.name ?? "unknown") UUID: \(uuidArgs) RSSI: \(rssiArgs)")
+            mLastDiscoveryLogTime[uuidArgs] = now
+        }
+
         if peripheral.delegate == nil {
             peripheral.delegate = peripheralDelegate
         }
         mPeripherals[uuidArgs] = peripheral
-        mAPI.onDiscovered(peripheralArgs: peripheralArgs, rssiArgs: rssiArgs, advertisementArgs: advertisementArgs) {_ in }
+        mAPI.onDiscovered(peripheralArgs: peripheralArgs, rssiArgs: rssiArgs, advertisementArgs: advertisementArgs) { result in
+            switch result {
+            case .success:
+                break // Don't spam logs for every discovery
+            case .failure(let error):
+                NSLog("[BLE-Bitchat] ERROR: Failed to notify Dart of discovery: \(error)")
+            }
+        }
     }
 
     func didConnect(central: CBCentralManager, peripheral: CBPeripheral) {
+        NSLog("[BLE-Bitchat] ====== CONNECTED ======")
         let peripheralArgs = peripheral.toArgs()
         let uuidArgs = peripheralArgs.uuidArgs
+        NSLog("[BLE-Bitchat] Connected to: \(peripheral.name ?? "unknown") UUID: \(uuidArgs)")
         let stateArgs = MyConnectionStateArgs.connected
         mAPI.onConnectionStateChanged(peripheralArgs: peripheralArgs, stateArgs: stateArgs) { _ in }
         guard let completion = mConnectCompletions.removeValue(forKey: uuidArgs) else {
+            NSLog("[BLE-Bitchat] No completion handler for connection (unexpected)")
             return
         }
+        NSLog("[BLE-Bitchat] Calling connection completion handler")
         completion(.success(()))
     }
 
     func didFailToConnect(central: CBCentralManager, peripheral: CBPeripheral, error: Error?) {
+        NSLog("[BLE-Bitchat] ====== CONNECTION FAILED ======")
         let uuidArgs = peripheral.identifier.toArgs()
+        NSLog("[BLE-Bitchat] Failed to connect to: \(peripheral.name ?? "unknown") UUID: \(uuidArgs)")
+        NSLog("[BLE-Bitchat] Error: \(error?.localizedDescription ?? "unknown error")")
         guard let completion = mConnectCompletions.removeValue(forKey: uuidArgs) else {
+            NSLog("[BLE-Bitchat] No completion handler for failed connection")
             return
         }
         completion(.failure(error ?? MyError.unknown))
     }
 
     func didDisconnectPeripheral(central: CBCentralManager, peripheral: CBPeripheral, error: Error?) {
+        NSLog("[BLE-Bitchat] ====== DISCONNECTED ======")
         let peripheralArgs = peripheral.toArgs()
         let uuidArgs = peripheralArgs.uuidArgs
+        NSLog("[BLE-Bitchat] Disconnected from: \(peripheral.name ?? "unknown") UUID: \(uuidArgs)")
+        if let error = error {
+            NSLog("[BLE-Bitchat] Disconnect error: \(error.localizedDescription)")
+        }
         mServices.removeValue(forKey: uuidArgs)
         mCharacteristics.removeValue(forKey: uuidArgs)
         mDescriptors.removeValue(forKey: uuidArgs)
@@ -437,21 +561,38 @@ class MyCentralManager: MyCentralManagerHostAPI {
     }
 
     func didDiscoverServices(peripheral: CBPeripheral, error: Error?) {
+        NSLog("[BLE-Bitchat] ====== DID DISCOVER SERVICES ======")
         let uuidArgs = peripheral.identifier.toArgs()
+        NSLog("[BLE-Bitchat] didDiscoverServices callback for: \(uuidArgs)")
+        NSLog("[BLE-Bitchat] Peripheral: \(peripheral.name ?? "unknown"), state: \(peripheralStateDescription(peripheral.state))")
+        if let error = error {
+            NSLog("[BLE-Bitchat] ERROR in didDiscoverServices: \(error.localizedDescription)")
+        }
         guard let completion = mDiscoverServicesCompletions.removeValue(forKey: uuidArgs) else {
+            NSLog("[BLE-Bitchat] WARNING: No completion handler found for \(uuidArgs) (unexpected callback)")
             return
         }
         if error == nil {
             let services = peripheral.services ?? []
+            NSLog("[BLE-Bitchat] Found \(services.count) services")
             var servicesArgs = [MyGATTServiceArgs]()
             for service in services {
+                NSLog("[BLE-Bitchat]   Service: \(service.uuid.uuidString)")
                 let serviceArgs = service.toArgs()
                 self.mServices[uuidArgs, default: [:]][serviceArgs.hashCodeArgs] = service
                 servicesArgs.append(serviceArgs)
             }
-            completion(.success(servicesArgs))
+            NSLog("[BLE-Bitchat] Calling completion with \(servicesArgs.count) services (dispatching to main thread)")
+            // CRITICAL: Flutter platform channel requires replies on main thread
+            DispatchQueue.main.async {
+                completion(.success(servicesArgs))
+            }
         } else {
-            completion(.failure(error!))
+            NSLog("[BLE-Bitchat] Calling completion with error: \(error!.localizedDescription)")
+            // CRITICAL: Flutter platform channel requires replies on main thread
+            DispatchQueue.main.async {
+                completion(.failure(error!))
+            }
         }
     }
 

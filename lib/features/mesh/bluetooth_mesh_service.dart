@@ -75,7 +75,12 @@ class BluetoothMeshService
 
   bool _isActive = false;
   Timer? _announceTimer;
+  Timer? _packetCleanupTimer;
   final List<Peripheral> _connectedDevices = [];
+
+  /// Tracks recently processed packets to prevent duplicate processing
+  /// Key: unique packet identifier, Value: timestamp when processed
+  final Map<String, DateTime> _processedPackets = {};
 
   /// Maps protocol peer IDs to Bluetooth device UUIDs for routing
   /// Key: peer ID (e.g., "813654e4c15d2c8d")
@@ -177,6 +182,7 @@ class BluetoothMeshService
 
       _isActive = true;
       _startPeriodicAnnounce();
+      _startPacketCleanupTimer();
       // Send immediate announce on start (matches Android BluetoothMeshService.startServices)
       await _sendBroadcastAnnounce();
       debugPrint('$_tag Mesh service started successfully');
@@ -196,6 +202,9 @@ class BluetoothMeshService
     _isActive = false;
     _announceTimer?.cancel();
     _announceTimer = null;
+    _packetCleanupTimer?.cancel();
+    _packetCleanupTimer = null;
+    _processedPackets.clear();
     _gattServerManager.stop();
     _gattClientManager.stop();
     _connectedDevices.clear();
@@ -211,6 +220,21 @@ class BluetoothMeshService
           return;
         }
         _sendBroadcastAnnounce();
+      },
+    );
+  }
+
+  /// Starts periodic cleanup of old processed packet entries.
+  /// Runs every 10 seconds to remove entries older than 30 seconds.
+  void _startPacketCleanupTimer() {
+    _packetCleanupTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (timer) {
+        if (!_isActive) {
+          timer.cancel();
+          return;
+        }
+        _cleanupProcessedPackets();
       },
     );
   }
@@ -514,6 +538,28 @@ class BluetoothMeshService
     return truncated.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
+  /// Creates a unique key for packet deduplication.
+  /// Combines senderID, timestamp, and first 16 bytes of signature.
+  /// @param packet - The packet to create a key for
+  /// @return A unique string key for this packet
+  String _createPacketKey(BitchatPacket packet) {
+    final senderHex = packet.senderID != null
+        ? packet.senderID!.map((b) => b.toRadixString(16).padLeft(2, '0')).join()
+        : 'unknown';
+    final timestampMs = packet.timestamp?.millisecondsSinceEpoch ?? 0;
+    final sigHex = packet.signature != null && packet.signature!.length >= 16
+        ? packet.signature!.sublist(0, 16).map((b) => b.toRadixString(16).padLeft(2, '0')).join()
+        : 'nosig';
+    return '$senderHex:$timestampMs:$sigHex';
+  }
+
+  /// Cleans up old entries from the processed packets map.
+  /// Removes entries older than 30 seconds to prevent memory growth.
+  void _cleanupProcessedPackets() {
+    final cutoff = DateTime.now().subtract(const Duration(seconds: 30));
+    _processedPackets.removeWhere((key, timestamp) => timestamp.isBefore(cutoff));
+  }
+
   /// Signs a packet before broadcast.
   /// This matches Android's signPacketBeforeBroadcast() behavior.
   /// @param packet - The packet to sign
@@ -634,6 +680,10 @@ class BluetoothMeshService
       isVerifiedName: existingPeer?.isVerifiedName ?? false,
     ));
 
+    // Notify delegate of peer list update (so UI refreshes)
+    final peerIds = peerManager.getAllPeers().map((p) => p.id).toList();
+    delegate?.didUpdatePeerList(peerIds);
+
     // Process packet based on type
     _processIncomingPacket(packet, senderPeerID);
 
@@ -707,6 +757,10 @@ class BluetoothMeshService
       transport: TransportType.bluetooth,
       isVerifiedName: existingPeer?.isVerifiedName ?? false,
     ));
+
+    // Notify delegate of peer list update (so UI refreshes)
+    final peerIds = peerManager.getAllPeers().map((p) => p.id).toList();
+    delegate?.didUpdatePeerList(peerIds);
 
     // Process the packet
     debugPrint('$_tag Calling _processIncomingPacket...');
@@ -839,6 +893,20 @@ class BluetoothMeshService
     debugPrint('$_tag From peer: $peerID');
     debugPrint('$_tag ========================================');
 
+    // Packet-level deduplication: check if we've seen this packet recently
+    final packetKey = _createPacketKey(packet);
+    final now = DateTime.now();
+    final existingTimestamp = _processedPackets[packetKey];
+    if (existingTimestamp != null) {
+      final elapsed = now.difference(existingTimestamp);
+      if (elapsed.inSeconds < 2) {
+        debugPrint('$_tag DUPLICATE PACKET skipped: $packetKey');
+        return;
+      }
+    }
+    // Record this packet as processed
+    _processedPackets[packetKey] = now;
+
     try {
       if (packet.payload == null) {
         debugPrint('$_tag *** ERROR: payload is NULL ***');
@@ -870,6 +938,8 @@ class BluetoothMeshService
           sender: msg.sender.isEmpty ? senderName : msg.sender,
         );
 
+        debugPrint(
+            '$_tag Final message sender: "${messageWithPeerID.sender}" (was: "${msg.sender}")');
         debugPrint(
             '$_tag Final message content: "${messageWithPeerID.content}"');
         debugPrint('$_tag Delegate is ${delegate == null ? "NULL" : "SET"}');

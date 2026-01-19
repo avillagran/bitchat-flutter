@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:bitchat/data/models/bitchat_message.dart';
 import 'package:bitchat/features/chat/chat_provider.dart';
+import 'package:bitchat/features/debug/debug_settings_provider.dart';
 import 'package:bitchat/ui/theme/bitchat_colors.dart';
 import 'package:bitchat/ui/widgets/about_sheet.dart';
 import 'package:bitchat/ui/widgets/chat_input.dart';
@@ -44,6 +45,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final GlobalKey<ResponsiveSidebarState> _sidebarKey =
       GlobalKey<ResponsiveSidebarState>();
   bool _isSidebarVisible = true;
+
+  // Debug panel state
+  bool _debugPanelExpanded = true;
 
   @override
   void initState() {
@@ -282,6 +286,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Watch chat state
     final chatState = ref.watch(chatProvider);
 
+    // DEBUG: Log every rebuild to confirm UI updates
+    debugPrint('[ChatScreen] ========================================');
+    debugPrint('[ChatScreen] BUILD CALLED');
+    debugPrint('[ChatScreen] peers.length: ${chatState.peers.length}');
+    debugPrint('[ChatScreen] messages.length: ${chatState.messages.length}');
+    for (final p in chatState.peers) {
+      debugPrint('[ChatScreen]   peer: ${p.name} (${p.id}), connected: ${p.isConnected}');
+    }
+    debugPrint('[ChatScreen] ========================================');
+
+    // Watch debug settings for verbose mode
+    final debugState = ref.watch(debugSettingsProvider);
+    final isVerbose = debugState.verboseLoggingEnabled;
+
     // Build the main chat content
     final chatContent = Scaffold(
       backgroundColor: colorScheme.surface,
@@ -328,6 +346,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             thickness: 1,
             color: colorScheme.primary.withOpacity(0.2),
           ),
+
+          // Debug panel (only when verbose logging enabled)
+          if (isVerbose) _buildDebugMessagesPanel(chatState, colorScheme),
 
           // Messages list
           Expanded(
@@ -564,6 +585,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final peerCount = chatState.peers.length;
     final isGeohashMode = chatState.currentGeohash != null;
 
+    // DEBUG: Print peer count when building this widget
+    debugPrint('[PeerCounter] Building with peerCount: $peerCount');
+
     // Match Android colors: blue for mesh, green for geohash
     final countColor = isGeohashMode
         ? BitchatColors.locationGreen
@@ -673,6 +697,201 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
             textAlign: TextAlign.center,
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Builds the debug messages panel showing ALL messages in state.
+  /// Only visible when verbose logging is enabled in debug settings.
+  Widget _buildDebugMessagesPanel(ChatState chatState, ColorScheme colorScheme) {
+    final messages = chatState.messages;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black87,
+        border: Border(
+          bottom: BorderSide(color: Colors.amber.withOpacity(0.5), width: 1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with toggle
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _debugPanelExpanded = !_debugPanelExpanded;
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              color: Colors.amber.withOpacity(0.2),
+              child: Row(
+                children: [
+                  Icon(
+                    _debugPanelExpanded
+                        ? Icons.expand_less
+                        : Icons.expand_more,
+                    color: Colors.amber,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '🐛 DEBUG: ${messages.length} messages in state',
+                    style: const TextStyle(
+                      color: Colors.amber,
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'tap to ${_debugPanelExpanded ? 'collapse' : 'expand'}',
+                    style: TextStyle(
+                      color: Colors.amber.withOpacity(0.6),
+                      fontFamily: 'monospace',
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Expandable content
+          if (_debugPanelExpanded)
+            Container(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: messages.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text(
+                        'No messages in state',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontFamily: 'monospace',
+                          fontSize: 10,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final msg = messages[index];
+                        final isMyMessage =
+                            msg.senderPeerID == chatState.nickname ||
+                                msg.sender == chatState.nickname;
+
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Colors.grey.withOpacity(0.2),
+                                width: 0.5,
+                              ),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Message ID and sender
+                              Row(
+                                children: [
+                                  Text(
+                                    '#$index',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontFamily: 'monospace',
+                                      fontSize: 9,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      'ID: ${msg.id}',
+                                      style: TextStyle(
+                                        color: isMyMessage
+                                            ? Colors.cyan
+                                            : Colors.green,
+                                        fontFamily: 'monospace',
+                                        fontSize: 9,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              // Sender info
+                              Row(
+                                children: [
+                                  Text(
+                                    'sender: ',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontFamily: 'monospace',
+                                      fontSize: 9,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      '"${msg.sender}" (peerID: ${msg.senderPeerID ?? "null"})',
+                                      style: const TextStyle(
+                                        color: Colors.orange,
+                                        fontFamily: 'monospace',
+                                        fontSize: 9,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              // Content preview
+                              Row(
+                                children: [
+                                  Text(
+                                    'content: ',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontFamily: 'monospace',
+                                      fontSize: 9,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      '"${msg.content.length > 50 ? '${msg.content.substring(0, 50)}...' : msg.content}"',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontFamily: 'monospace',
+                                        fontSize: 9,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              // Channel if present
+                              if (msg.channel != null)
+                                Text(
+                                  'channel: ${msg.channel}',
+                                  style: TextStyle(
+                                    color: Colors.purple.shade300,
+                                    fontFamily: 'monospace',
+                                    fontSize: 9,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
         ],
       ),
     );

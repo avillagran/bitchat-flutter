@@ -11,7 +11,7 @@ class AppConstants {
   static const int fragmentSizeThreshold = 512;
 
   // MTU negotiation settings
-  static const bool requestMtu = false; // disabled to test connection stability
+  static const bool requestMtu = true; // enabled for proper packet sizes
   static const int requestedMtuSize =
       247; // safer default, 517 sometimes fails on devices
 

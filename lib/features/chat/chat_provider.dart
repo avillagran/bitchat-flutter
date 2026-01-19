@@ -824,6 +824,10 @@ class ChatNotifier extends StateNotifier<ChatState>
   /// Update peer list from mesh service.
   void updatePeers() {
     final peers = _meshService.peerManager.getAllPeers();
+    debugPrint('[ChatNotifier] updatePeers: setting ${peers.length} peers');
+    for (final p in peers) {
+      debugPrint('[ChatNotifier]   - id: ${p.id}, name: ${p.name}, connected: ${p.isConnected}');
+    }
     state = state.copyWith(peers: peers);
   }
 

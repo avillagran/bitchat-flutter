@@ -76,6 +76,49 @@ class PeerInfo {
       isVerifiedName: isVerifiedName ?? this.isVerifiedName,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! PeerInfo) return false;
+    return id == other.id &&
+        name == other.name &&
+        isConnected == other.isConnected &&
+        lastSeen == other.lastSeen &&
+        rssi == other.rssi &&
+        transport == other.transport &&
+        isVerifiedName == other.isVerifiedName &&
+        _bytesEqual(noisePublicKey, other.noisePublicKey) &&
+        _bytesEqual(signingPublicKey, other.signingPublicKey);
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        id,
+        name,
+        isConnected,
+        lastSeen,
+        rssi,
+        transport,
+        isVerifiedName,
+        noisePublicKey != null ? Object.hashAll(noisePublicKey!) : null,
+        signingPublicKey != null ? Object.hashAll(signingPublicKey!) : null,
+      );
+
+  /// Helper to compare Uint8List byte-by-byte
+  static bool _bytesEqual(Uint8List? a, Uint8List? b) {
+    if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  String toString() =>
+      'PeerInfo(id: $id, name: $name, connected: $isConnected)';
 }
 
 /// Interface for managing mesh peers. ChangeNotifier for Provider/Riverpod.

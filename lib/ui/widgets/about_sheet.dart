@@ -252,6 +252,16 @@ class _AboutSheetState extends ConsumerState<AboutSheet> {
             letterSpacing: 1,
           ),
         ),
+        Text(
+          'flutter',
+          style: TextStyle(
+            color: colorScheme.onSurface,
+            fontFamily: 'monospace',
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1,
+          ),
+        ),
         const SizedBox(height: 4),
         Text(
           'v$_appVersion',

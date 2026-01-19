@@ -1,0 +1,560 @@
+🚀 Bitchat Flutter run helper
+════════════════════════════════════════
+Usage: ./run.sh [platform] [-d <id>|--device <id>] [--clean] [--rosetta]
+  platform: macos|android|ios|windows|linux (default: macos)
+  -d <id>, --device <id>: Specific device ID
+  --clean: Clean build artifacts before running
+  --rosetta: Force x86_64 architecture on Apple Silicon
+
+🛠️  Verifying Ruby/CocoaPods environment
+   Ruby: /Users/avillagran/.data/rv/rubies/ruby-3.2.6/bin/ruby
+   Ruby Version: ruby 3.2.6 (2024-10-30 revision 63aeb018eb) [arm64-darwin23]
+   Pod: /Users/avillagran/.data/rv/rubies/ruby-3.2.6/bin/pod
+1.16.2
+📥 Getting Dart/Flutter dependencies...
+Resolving dependencies...
+  _fe_analyzer_shared 67.0.0 (93.0.0 available)
+  analyzer 6.4.1 (10.0.0 available)
+  analyzer_plugin 0.11.3 (0.14.0 available)
+  async 2.11.0 (2.13.0 available)
+  bluetooth_low_energy 6.0.2 (6.2.0 available)
+  bluetooth_low_energy_android 6.0.3 (6.2.0 available)
+! bluetooth_low_energy_darwin 6.0.0 from path packages/bluetooth_low_energy_bitchat (overridden)
+  bluetooth_low_energy_linux 6.0.0 (6.2.0 available)
+  bluetooth_low_energy_platform_interface 6.0.0 (6.2.0 available)
+  bluetooth_low_energy_windows 6.0.0 (6.2.0 available)
+  boolean_selector 2.1.1 (2.1.2 available)
+  build 2.4.1 (4.0.4 available)
+  build_config 1.1.1 (1.2.0 available)
+  build_daemon 4.0.1 (4.1.1 available)
+  build_resolvers 2.4.2 (3.0.4 available)
+  build_runner 2.4.9 (2.10.5 available)
+  build_runner_core 7.3.0 (9.3.2 available)
+  characters 1.3.0 (1.4.1 available)
+  checked_yaml 2.0.3 (2.0.4 available)
+  clock 1.1.1 (1.1.2 available)
+  code_builder 4.10.0 (4.11.1 available)
+  collection 1.18.0 (1.19.1 available)
+  convert 3.1.1 (3.1.2 available)
+  crypto 3.0.3 (3.0.7 available)
+  custom_lint_core 0.6.3 (0.8.2 available)
+  dart_style 2.3.6 (3.1.4 available)
+  fake_async 1.3.1 (1.3.3 available)
+  ffi 2.1.3 (2.1.5 available)
+  flutter_hooks 0.20.5 (0.21.3+1 available)
+  flutter_lints 4.0.0 (6.0.0 available)
+  flutter_local_notifications 17.2.4 (19.5.0 available)
+  flutter_local_notifications_linux 4.0.1 (6.0.0 available)
+  flutter_local_notifications_platform_interface 7.2.0 (9.1.0 available)
+  flutter_map 6.1.0 (8.2.2 available)
+  flutter_riverpod 2.6.1 (3.1.0 available)
+  flutter_secure_storage 9.2.4 (10.0.0 available)
+  flutter_secure_storage_linux 1.2.3 (3.0.0 available)
+  flutter_secure_storage_macos 3.1.3 (4.0.0 available)
+  flutter_secure_storage_platform_interface 1.1.2 (2.0.1 available)
+  flutter_secure_storage_web 1.2.1 (2.1.0 available)
+  flutter_secure_storage_windows 3.1.2 (4.1.0 available)
+  freezed 2.5.2 (3.2.4 available)
+  freezed_annotation 2.4.4 (3.1.0 available)
+  geolocator 12.0.0 (14.0.2 available)
+  geolocator_android 4.6.1 (5.0.2 available)
+  geolocator_apple 2.3.9 (2.3.13 available)
+  geolocator_platform_interface 4.2.4 (4.2.6 available)
+  geolocator_web 4.0.0 (4.1.3 available)
+  geolocator_windows 0.2.3 (0.2.5 available)
+  go_router 14.6.2 (17.0.1 available)
+  google_fonts 6.3.0 (7.0.2 available)
+  graphs 2.3.1 (2.3.2 available)
+  http 1.2.2 (1.6.0 available)
+  http_parser 4.0.2 (4.1.2 available)
+  intl 0.19.0 (0.20.2 available)
+  io 1.0.4 (1.0.5 available)
+  js 0.6.7 (0.7.2 available)
+  json_serializable 6.8.0 (6.11.4 available)
+  leak_tracker 10.0.0 (11.0.2 available)
+  leak_tracker_flutter_testing 2.0.1 (3.0.10 available)
+  leak_tracker_testing 2.0.1 (3.0.2 available)
+  lints 4.0.0 (6.0.0 available)
+  logging 1.2.0 (1.3.0 available)
+  matcher 0.12.16+1 (0.12.18 available)
+  material_color_utilities 0.8.0 (0.13.0 available)
+  meta 1.11.0 (1.18.0 available)
+  mgrs_dart 2.0.0 (3.0.0 available)
+  mime 1.0.6 (2.0.0 available)
+  mockito 5.4.4 (5.6.3 available)
+  package_config 2.1.0 (2.2.0 available)
+  path 1.9.0 (1.9.1 available)
+  path_provider 2.1.4 (2.1.5 available)
+  path_provider_android 2.2.4 (2.2.22 available)
+  path_provider_foundation 2.4.1 (2.6.0 available)
+  permission_handler 11.3.1 (12.0.1 available)
+  permission_handler_android 12.0.13 (13.0.1 available)
+  permission_handler_platform_interface 4.2.3 (4.3.0 available)
+  petitparser 6.0.2 (7.0.1 available)
+  pool 1.5.1 (1.5.2 available)
+  proj4dart 2.1.0 (3.0.0 available)
+  pub_semver 2.1.4 (2.2.0 available)
+  pubspec_parse 1.4.0 (1.5.0 available)
+  riverpod 2.6.1 (3.1.0 available)
+  riverpod_analyzer_utils 0.5.1 (0.5.10 available)
+  riverpod_annotation 2.6.1 (4.0.0 available)
+  riverpod_generator 2.4.0 (4.0.0+1 available)
+  shared_preferences 2.2.3 (2.5.4 available)
+  shared_preferences_android 2.2.2 (2.4.18 available)
+  shared_preferences_foundation 2.5.3 (2.5.6 available)
+  shared_preferences_web 2.4.1 (2.4.3 available)
+  shelf 1.4.1 (1.4.2 available)
+  shelf_web_socket 1.0.4 (3.0.0 available)
+  source_gen 1.5.0 (4.1.2 available)
+  source_helper 1.3.4 (1.3.10 available)
+  source_span 1.10.0 (1.10.1 available)
+  stack_trace 1.11.1 (1.12.1 available)
+  stream_channel 2.1.2 (2.1.4 available)
+  string_scanner 1.2.0 (1.4.1 available)
+  term_glyph 1.2.1 (1.2.2 available)
+  test_api 0.6.1 (0.7.9 available)
+  timezone 0.9.4 (0.11.0 available)
+  timing 1.0.1 (1.0.2 available)
+  typed_data 1.3.2 (1.4.0 available)
+  unicode 0.3.1 (1.1.8 available)
+  vector_math 2.1.4 (2.2.0 available)
+  vm_service 13.0.0 (15.0.2 available)
+  watcher 1.1.4 (1.2.1 available)
+  web 0.5.1 (1.1.1 available)
+  web_socket_channel 2.4.0 (3.0.3 available)
+  win32 5.5.0 (5.15.0 available)
+  xml 6.5.0 (6.6.1 available)
+  yaml 3.1.2 (3.1.3 available)
+Got dependencies!
+111 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+📦 Installing CocoaPods dependencies (macos/Podfile detected)...
+Analyzing dependencies
+Downloading dependencies
+Generating Pods project
+Integrating client project
+Pod installation complete! There are 7 dependencies from the Podfile and 7 total pods installed.
+
+[!] CocoaPods did not set the base configuration of your project because your project already has a custom config set. In order for CocoaPods integration to work at all, please either set the base configurations of the target `Runner` to `Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig` or include the `Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig` in your build configuration (`Runner/Configs/AppInfo.xcconfig`).
+
+[!] CocoaPods did not set the base configuration of your project because your project already has a custom config set. In order for CocoaPods integration to work at all, please either set the base configurations of the target `Runner` to `Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig` or include the `Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig` in your build configuration (`Runner/Configs/AppInfo.xcconfig`).
+
+[!] CocoaPods did not set the base configuration of your project because your project already has a custom config set. In order for CocoaPods integration to work at all, please either set the base configurations of the target `Runner` to `Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig` or include the `Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig` in your build configuration (`Runner/Configs/AppInfo.xcconfig`).
+🎯 Target: macos
+🔐 Resetting TCC permissions...
+Successfully reset BluetoothAlways
+Successfully reset All approval status for com.bitchat.bitchat
+🍎 Building macOS debug bundle (native architecture)...
+
+Building macOS application...                                   
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:macOS, arch:arm64, id:00006020-001C11D83A20C01E, name:My Mac }
+{ platform:macOS, arch:x86_64, id:00006020-001C11D83A20C01E, name:My Mac }
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:8:8: Error: Error when reading 'packages/bluetooth_low_energy_bitchat/lib/src/my_api.g.dart': No such file or directory
+import 'my_api.g.dart';
+       ^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:9:8: Error: Error when reading 'packages/bluetooth_low_energy_bitchat/lib/src/my_api.g.dart': No such file or directory
+import 'my_api.g.dart';
+       ^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:5:8: Error: Error when reading 'packages/bluetooth_low_energy_bitchat/lib/src/my_api.g.dart': No such file or directory
+import 'my_api.g.dart';
+       ^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:12:16: Error: Type 'MyCentralManagerFlutterAPI' not found.
+    implements MyCentralManagerFlutterAPI {
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:13:9: Error: Type 'MyCentralManagerHostAPI' not found.
+  final MyCentralManagerHostAPI _api;
+        ^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:235:23: Error: Type 'MyBluetoothLowEnergyStateArgs' not found.
+  void onStateChanged(MyBluetoothLowEnergyStateArgs stateArgs) {
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:248:5: Error: Type 'MyPeripheralArgs' not found.
+    MyPeripheralArgs peripheralArgs,
+    ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:250:5: Error: Type 'MyAdvertisementArgs' not found.
+    MyAdvertisementArgs advertisementArgs,
+    ^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:266:5: Error: Type 'MyPeripheralArgs' not found.
+    MyPeripheralArgs peripheralArgs,
+    ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:267:5: Error: Type 'MyConnectionStateArgs' not found.
+    MyConnectionStateArgs stateArgs,
+    ^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:282:5: Error: Type 'MyPeripheralArgs' not found.
+    MyPeripheralArgs peripheralArgs,
+    ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:283:5: Error: Type 'MyGATTCharacteristicArgs' not found.
+    MyGATTCharacteristicArgs characteristicArgs,
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:323:15: Error: Type 'MyGATTServiceArgs' not found.
+  Future<List<MyGATTServiceArgs>> _discoverServices(String uuidArgs) async {
+              ^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:344:15: Error: Type 'MyGATTServiceArgs' not found.
+  Future<List<MyGATTServiceArgs>> _discoverIncludedServices(
+              ^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:368:15: Error: Type 'MyGATTCharacteristicArgs' not found.
+  Future<List<MyGATTCharacteristicArgs>> _discoverCharacteristics(
+              ^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:387:15: Error: Type 'MyGATTDescriptorArgs' not found.
+  Future<List<MyGATTDescriptorArgs>> _discoverDescriptors(
+              ^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:12:16: Error: Type 'MyPeripheralManagerFlutterAPI' not found.
+    implements MyPeripheralManagerFlutterAPI {
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:13:9: Error: Type 'MyPeripheralManagerHostAPI' not found.
+  final MyPeripheralManagerHostAPI _api;
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:237:23: Error: Type 'MyBluetoothLowEnergyStateArgs' not found.
+  void onStateChanged(MyBluetoothLowEnergyStateArgs stateArgs) {
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:249:23: Error: Type 'MyATTRequestArgs' not found.
+  void didReceiveRead(MyATTRequestArgs requestArgs) async {
+                      ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:275:29: Error: Type 'MyATTRequestArgs' not found.
+  void didReceiveWrite(List<MyATTRequestArgs?> requestsArgs) async {
+                            ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:329:5: Error: Type 'MyCentralArgs' not found.
+    MyCentralArgs centralArgs,
+    ^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:398:5: Error: Type 'MyATTErrorArgs' not found.
+    MyATTErrorArgs errorArgs,
+    ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:28:45: Error: Type 'MyBluetoothLowEnergyStateArgs' not found.
+extension MyBluetoothLowEnergyStateArgsX on MyBluetoothLowEnergyStateArgs {
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:46:37: Error: Type 'MyConnectionStateArgs' not found.
+extension MyConnectionStateArgsX on MyConnectionStateArgs {
+                                    ^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:53:8: Error: Type 'MyGATTCharacteristicPropertyArgs' not found.
+    on MyGATTCharacteristicPropertyArgs {
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:59:35: Error: Type 'MyAdvertisementArgs' not found.
+extension MyAdvertisementArgsX on MyAdvertisementArgs {
+                                  ^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:79:32: Error: Type 'MyPeripheralArgs' not found.
+extension MyPeripheralArgsX on MyPeripheralArgs {
+                               ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:87:36: Error: Type 'MyGATTDescriptorArgs' not found.
+extension MyGATTDescriptorArgsX on MyGATTDescriptorArgs {
+                                   ^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:96:40: Error: Type 'MyGATTCharacteristicArgs' not found.
+extension MyGATTCharacteristicArgsX on MyGATTCharacteristicArgs {
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:113:33: Error: Type 'MyGATTServiceArgs' not found.
+extension MyGATTServiceArgsX on MyGATTServiceArgs {
+                                ^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:131:29: Error: Type 'MyCentralArgs' not found.
+extension MyCentralArgsX on MyCentralArgs {
+                            ^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:147:3: Error: Type 'MyGATTCharacteristicWriteTypeArgs' not found.
+  MyGATTCharacteristicWriteTypeArgs toArgs() {
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:153:3: Error: Type 'MyGATTCharacteristicPropertyArgs' not found.
+  MyGATTCharacteristicPropertyArgs toArgs() {
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:159:3: Error: Type 'MyGATTCharacteristicPermissionArgs' not found.
+  MyGATTCharacteristicPermissionArgs toArgs() {
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:165:3: Error: Type 'MyATTErrorArgs' not found.
+  MyATTErrorArgs toArgs() {
+  ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:206:3: Error: Type 'MyAdvertisementArgs' not found.
+  MyAdvertisementArgs toArgs() {
+  ^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:223:3: Error: Type 'MyMutableGATTDescriptorArgs' not found.
+  MyMutableGATTDescriptorArgs toArgs() {
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:235:3: Error: Type 'MyMutableGATTCharacteristicArgs' not found.
+  MyMutableGATTCharacteristicArgs toArgs() {
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:259:3: Error: Type 'MyMutableGATTServiceArgs' not found.
+  MyMutableGATTServiceArgs toArgs() {
+  ^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:13:9: Error: 'MyCentralManagerHostAPI' isn't a type.
+  final MyCentralManagerHostAPI _api;
+        ^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:25:16: Error: Method not found: 'MyCentralManagerHostAPI'.
+      : _api = MyCentralManagerHostAPI(),
+               ^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:51:5: Error: The getter 'MyCentralManagerFlutterAPI' isn't defined for the class 'MyCentralManager'.
+ - 'MyCentralManager' is from 'package:bluetooth_low_energy_darwin/src/my_central_manager.dart' ('packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyCentralManagerFlutterAPI'.
+    MyCentralManagerFlutterAPI.setUp(this);
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:92:15: Error: 'MyPeripheralArgs' isn't a type.
+        .cast<MyPeripheralArgs>()
+              ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:149:12: Error: A value of type 'List<dynamic>' can't be returned from an async function with return type 'Future<List<GATTService>>'.
+ - 'List' is from 'dart:core'.
+ - 'Future' is from 'dart:async'.
+ - 'GATTService' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+    return services;
+           ^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:235:23: Error: 'MyBluetoothLowEnergyStateArgs' isn't a type.
+  void onStateChanged(MyBluetoothLowEnergyStateArgs stateArgs) {
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:248:5: Error: 'MyPeripheralArgs' isn't a type.
+    MyPeripheralArgs peripheralArgs,
+    ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:250:5: Error: 'MyAdvertisementArgs' isn't a type.
+    MyAdvertisementArgs advertisementArgs,
+    ^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:266:5: Error: 'MyPeripheralArgs' isn't a type.
+    MyPeripheralArgs peripheralArgs,
+    ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:267:5: Error: 'MyConnectionStateArgs' isn't a type.
+    MyConnectionStateArgs stateArgs,
+    ^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:282:5: Error: 'MyPeripheralArgs' isn't a type.
+    MyPeripheralArgs peripheralArgs,
+    ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:283:5: Error: 'MyGATTCharacteristicArgs' isn't a type.
+    MyGATTCharacteristicArgs characteristicArgs,
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:327:35: Error: 'MyGATTServiceArgs' isn't a type.
+        .then((args) => args.cast<MyGATTServiceArgs>());
+                                  ^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:351:35: Error: 'MyGATTServiceArgs' isn't a type.
+        .then((args) => args.cast<MyGATTServiceArgs>());
+                                  ^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:375:35: Error: 'MyGATTCharacteristicArgs' isn't a type.
+        .then((args) => args.cast<MyGATTCharacteristicArgs>());
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_central_manager.dart:394:35: Error: 'MyGATTDescriptorArgs' isn't a type.
+        .then((args) => args.cast<MyGATTDescriptorArgs>());
+                                  ^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:13:9: Error: 'MyPeripheralManagerHostAPI' isn't a type.
+  final MyPeripheralManagerHostAPI _api;
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:29:16: Error: Method not found: 'MyPeripheralManagerHostAPI'.
+      : _api = MyPeripheralManagerHostAPI(),
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:75:5: Error: The getter 'MyPeripheralManagerFlutterAPI' isn't defined for the class 'MyPeripheralManager'.
+ - 'MyPeripheralManager' is from 'package:bluetooth_low_energy_darwin/src/my_peripheral_manager.dart' ('packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyPeripheralManagerFlutterAPI'.
+    MyPeripheralManagerFlutterAPI.setUp(this);
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:149:23: Error: Undefined name 'MyATTErrorArgs'.
+    const errorArgs = MyATTErrorArgs.success;
+                      ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:184:23: Error: Undefined name 'MyATTErrorArgs'.
+    const errorArgs = MyATTErrorArgs.success;
+                      ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:237:23: Error: 'MyBluetoothLowEnergyStateArgs' isn't a type.
+  void onStateChanged(MyBluetoothLowEnergyStateArgs stateArgs) {
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:249:23: Error: 'MyATTRequestArgs' isn't a type.
+  void didReceiveRead(MyATTRequestArgs requestArgs) async {
+                      ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:260:42: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'MyPeripheralManager'.
+ - 'MyPeripheralManager' is from 'package:bluetooth_low_energy_darwin/src/my_peripheral_manager.dart' ('packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+      await _respond(hashCodeArgs, null, MyATTErrorArgs.attributeNotFound);
+                                         ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:275:29: Error: 'MyATTRequestArgs' isn't a type.
+  void didReceiveWrite(List<MyATTRequestArgs?> requestsArgs) async {
+                            ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:281:43: Error: 'MyATTRequestArgs' isn't a type.
+    final requestArgs = requestsArgs.cast<MyATTRequestArgs>().first;
+                                          ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:286:43: Error: 'MyATTRequestArgs' isn't a type.
+    final unsupported = requestsArgs.cast<MyATTRequestArgs>().any((args) =>
+                                          ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:297:44: Error: 'MyATTRequestArgs' isn't a type.
+        final elements = requestsArgs.cast<MyATTRequestArgs>().fold(
+                                           ^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:287:14: Error: The getter 'centralArgs' isn't defined for the class 'Object?'.
+ - 'Object' is from 'dart:core'.
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'centralArgs'.
+        args.centralArgs.uuidArgs != centralArgs.uuidArgs ||
+             ^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:288:14: Error: The getter 'characteristicHashCodeArgs' isn't defined for the class 'Object?'.
+ - 'Object' is from 'dart:core'.
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'characteristicHashCodeArgs'.
+        args.characteristicHashCodeArgs != characteristicHashCodeArgs);
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:290:42: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'MyPeripheralManager'.
+ - 'MyPeripheralManager' is from 'package:bluetooth_low_energy_darwin/src/my_peripheral_manager.dart' ('packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+      await _respond(hashCodeArgs, null, MyATTErrorArgs.unsupportedGroupType);
+                                         ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:295:44: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'MyPeripheralManager'.
+ - 'MyPeripheralManager' is from 'package:bluetooth_low_energy_darwin/src/my_peripheral_manager.dart' ('packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        await _respond(hashCodeArgs, null, MyATTErrorArgs.attributeNotFound);
+                                           ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:300:36: Error: The getter 'valueArgs' isn't defined for the class 'Object?'.
+ - 'Object' is from 'dart:core'.
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'valueArgs'.
+            final valueArgs = args.valueArgs;
+                                   ^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:302:44: Error: The getter 'offsetArgs' isn't defined for the class 'Object?'.
+ - 'Object' is from 'dart:core'.
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'offsetArgs'.
+              previousValue.insertAll(args.offsetArgs, valueArgs);
+                                           ^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:329:5: Error: 'MyCentralArgs' isn't a type.
+    MyCentralArgs centralArgs,
+    ^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_peripheral_manager.dart:398:5: Error: 'MyATTErrorArgs' isn't a type.
+    MyATTErrorArgs errorArgs,
+    ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:31:12: Error: Undefined name 'MyBluetoothLowEnergyStateArgs'.
+      case MyBluetoothLowEnergyStateArgs.unknown:
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:32:12: Error: Undefined name 'MyBluetoothLowEnergyStateArgs'.
+      case MyBluetoothLowEnergyStateArgs.resetting:
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:34:12: Error: Undefined name 'MyBluetoothLowEnergyStateArgs'.
+      case MyBluetoothLowEnergyStateArgs.unsupported:
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:36:12: Error: Undefined name 'MyBluetoothLowEnergyStateArgs'.
+      case MyBluetoothLowEnergyStateArgs.unauthorized:
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:38:12: Error: Undefined name 'MyBluetoothLowEnergyStateArgs'.
+      case MyBluetoothLowEnergyStateArgs.poweredOff:
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:40:12: Error: Undefined name 'MyBluetoothLowEnergyStateArgs'.
+      case MyBluetoothLowEnergyStateArgs.poweredOn:
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:29:27: Error: A non-null value must be returned since the return type 'BluetoothLowEnergyState' doesn't allow null.
+ - 'BluetoothLowEnergyState' is from 'package:bluetooth_low_energy_platform_interface/src/bluetooth_low_energy_state.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/bluetooth_low_energy_state.dart').
+  BluetoothLowEnergyState toState() {
+                          ^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:106:17: Error: 'MyGATTDescriptorArgs' isn't a type.
+          .cast<MyGATTDescriptorArgs>()
+                ^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:120:17: Error: 'MyGATTServiceArgs' isn't a type.
+          .cast<MyGATTServiceArgs>()
+                ^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:124:17: Error: 'MyGATTCharacteristicArgs' isn't a type.
+          .cast<MyGATTCharacteristicArgs>()
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:148:12: Error: The getter 'MyGATTCharacteristicWriteTypeArgs' isn't defined for the class 'GATTCharacteristicWriteType'.
+ - 'GATTCharacteristicWriteType' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyGATTCharacteristicWriteTypeArgs'.
+    return MyGATTCharacteristicWriteTypeArgs.values[index];
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:154:12: Error: The getter 'MyGATTCharacteristicPropertyArgs' isn't defined for the class 'GATTCharacteristicProperty'.
+ - 'GATTCharacteristicProperty' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyGATTCharacteristicPropertyArgs'.
+    return MyGATTCharacteristicPropertyArgs.values[index];
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:160:12: Error: The getter 'MyGATTCharacteristicPermissionArgs' isn't defined for the class 'GATTCharacteristicPermission'.
+ - 'GATTCharacteristicPermission' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyGATTCharacteristicPermissionArgs'.
+    return MyGATTCharacteristicPermissionArgs.values[index];
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:168:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.invalidHandle;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:170:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.readNotPermitted;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:172:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.writeNotPermitted;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:174:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.invalidPDU;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:176:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.insufficientAuthentication;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:178:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.requestNotSupported;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:180:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.invalidOffset;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:182:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.insufficientAuthorization;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:184:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.prepareQueueFull;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:186:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.attributeNotFound;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:188:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.attributeNotLong;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:190:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.insufficientEncryptionKeySize;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:192:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.invalidAttributeValueLength;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:194:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.unlikelyError;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:196:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.insufficientEncryption;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:198:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.unsupportedGroupType;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:200:16: Error: The getter 'MyATTErrorArgs' isn't defined for the class 'GATTError'.
+ - 'GATTError' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MyATTErrorArgs'.
+        return MyATTErrorArgs.insufficientResources;
+               ^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:213:12: Error: The method 'MyAdvertisementArgs' isn't defined for the class 'Advertisement'.
+ - 'Advertisement' is from 'package:bluetooth_low_energy_platform_interface/src/advertisement.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/advertisement.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'MyAdvertisementArgs'.
+    return MyAdvertisementArgs(
+           ^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:224:12: Error: The method 'MyMutableGATTDescriptorArgs' isn't defined for the class 'MutableGATTDescriptor'.
+ - 'MutableGATTDescriptor' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'MyMutableGATTDescriptorArgs'.
+    return MyMutableGATTDescriptorArgs(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:236:12: Error: The method 'MyMutableGATTCharacteristicArgs' isn't defined for the class 'MutableGATTCharacteristic'.
+ - 'MutableGATTCharacteristic' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'MyMutableGATTCharacteristicArgs'.
+    return MyMutableGATTCharacteristicArgs(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/bluetooth_low_energy_bitchat/lib/src/my_api.dart:260:12: Error: The method 'MyMutableGATTServiceArgs' isn't defined for the class 'GATTService'.
+ - 'GATTService' is from 'package:bluetooth_low_energy_platform_interface/src/gatt.dart' ('/Users/avillagran/.pub-cache/hosted/pub.dev/bluetooth_low_energy_platform_interface-6.0.0/lib/src/gatt.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'MyMutableGATTServiceArgs'.
+    return MyMutableGATTServiceArgs(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+Target kernel_snapshot failed: Exception
+
+Command PhaseScriptExecution failed with a nonzero exit code
+/tmp/bitchat-clone-clean-20260116-091557/macos/Pods/Pods.xcodeproj: warning: The macOS deployment target 'MACOSX_DEPLOYMENT_TARGET' is set to 10.11, but the range of supported deployment target versions is 10.13 to 14.5.99. (in target 'flutter_local_notifications-flutter_local_notifications_privacy' from project 'Pods')
+warning: Run script build phase 'Run Script' will be run during every build because it does not specify any outputs. To address this warning, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'Flutter Assemble' from project 'Runner')
+** BUILD FAILED **
+
+Build process failed

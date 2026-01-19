@@ -184,14 +184,22 @@ class BitchatMessage with _$BitchatMessage {
         debugPrint('[BitchatMessage] UTF-8 decode SUCCESS');
         debugPrint('[BitchatMessage] Content: "$content"');
 
-        // Generate deterministic ID from content hash for deduplication
-        final idHash = content.hashCode.abs();
+        // Generate unique ID: timestamp + content hash + random suffix
+        // This ensures different messages with same content get unique IDs
+        final now = DateTime.now();
+        final timestamp = now.millisecondsSinceEpoch;
+        final contentHash = (content.hashCode.abs() % 10000).toString().padLeft(4, '0');
+        final randomSuffix = (now.microsecond % 1000).toString().padLeft(3, '0');
+        final uniqueId = 'android-$timestamp-$contentHash-$randomSuffix';
+
+        debugPrint('[BitchatMessage] Generated unique ID: $uniqueId');
+
         return BitchatMessage(
-          id: 'android-$idHash',
+          id: uniqueId,
           sender: '', // Will be filled by caller from packet senderID
           content: content,
           type: BitchatMessageType.Message,
-          timestamp: DateTime.now(),
+          timestamp: now,
         );
       } catch (e) {
         debugPrint('[BitchatMessage] UTF-8 decode FAILED: $e');

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart' as crypto;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../storage/secure_storage_service.dart';
 import 'noise_protocol.dart';
 
 class EncryptionService {
@@ -10,10 +10,7 @@ class EncryptionService {
   factory EncryptionService() => _instance;
   EncryptionService._internal();
 
-  final _storage = const FlutterSecureStorage();
-
-  static const String _staticPrivKeyPref = "noise_static_private_key";
-  static const String _signingPrivKeyPref = "ed25519_signing_private_key";
+  final _storage = SecureStorageService();
 
   late Uint8List _staticIdentityPrivateKey;
   late Uint8List _staticIdentityPublicKey;
@@ -27,40 +24,32 @@ class EncryptionService {
 
   Future<void> initialize() async {
     // 1. Noise Static Keys (X25519)
-    final storedNoisePriv = await _storage.read(key: _staticPrivKeyPref);
-    if (storedNoisePriv != null) {
-      _staticIdentityPrivateKey = base64Decode(storedNoisePriv);
-      final keyPair =
-          await crypto.X25519().newKeyPairFromSeed(_staticIdentityPrivateKey);
-      _staticIdentityPublicKey =
-          Uint8List.fromList((await keyPair.extractPublicKey()).bytes);
+    final storedStaticKeyPair = await _storage.loadStaticKeyPair();
+    if (storedStaticKeyPair != null) {
+      _staticIdentityPrivateKey = storedStaticKeyPair.privateKey;
+      _staticIdentityPublicKey = storedStaticKeyPair.publicKey;
     } else {
       final keyPair = await crypto.X25519().newKeyPair();
       final data = await keyPair.extract();
       _staticIdentityPrivateKey = Uint8List.fromList(data.bytes);
       _staticIdentityPublicKey =
           Uint8List.fromList((await keyPair.extractPublicKey()).bytes);
-      await _storage.write(
-          key: _staticPrivKeyPref,
-          value: base64Encode(_staticIdentityPrivateKey));
+      await _storage.saveStaticKeyPair(
+          _staticIdentityPrivateKey, _staticIdentityPublicKey);
     }
 
     // 2. Ed25519 Signing Keys
-    final storedSignPriv = await _storage.read(key: _signingPrivKeyPref);
-    if (storedSignPriv != null) {
-      _signingPrivateKey = base64Decode(storedSignPriv);
-      final keyPair =
-          await crypto.Ed25519().newKeyPairFromSeed(_signingPrivateKey);
-      _signingPublicKey =
-          Uint8List.fromList((await keyPair.extractPublicKey()).bytes);
+    final storedSigningKeyPair = await _storage.loadSigningKeyPair();
+    if (storedSigningKeyPair != null) {
+      _signingPrivateKey = storedSigningKeyPair.privateKey;
+      _signingPublicKey = storedSigningKeyPair.publicKey;
     } else {
       final keyPair = await crypto.Ed25519().newKeyPair();
       final data = await keyPair.extract();
       _signingPrivateKey = Uint8List.fromList(data.bytes);
       _signingPublicKey =
           Uint8List.fromList((await keyPair.extractPublicKey()).bytes);
-      await _storage.write(
-          key: _signingPrivKeyPref, value: base64Encode(_signingPrivateKey));
+      await _storage.saveSigningKeyPair(_signingPrivateKey, _signingPublicKey);
     }
   }
 
@@ -95,8 +84,7 @@ class EncryptionService {
   }
 
   void clearIdentity() async {
-    await _storage.delete(key: _staticPrivKeyPref);
-    await _storage.delete(key: _signingPrivKeyPref);
+    await _storage.clearIdentityData();
     _sessions.clear();
   }
 }
